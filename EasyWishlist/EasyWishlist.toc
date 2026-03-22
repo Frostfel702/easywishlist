@@ -1,0 +1,12 @@
+## Interface: 110107
+## Title: EasyWishlist
+## Notes: Track your best gear upgrades from Questionably Epic sim reports
+## Version: 1.0.0
+## Author: Alvadin
+## SavedVariables: EasyWishlistDB
+
+Core.lua
+JSON.lua
+Import.lua
+Minimap.lua
+UI.lua

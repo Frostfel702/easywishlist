@@ -1,0 +1,122 @@
+-- EasyWishlist - Import.lua
+-- Import dialog: paste QE JSON, validate, save
+
+local importDialog
+
+local function CreateImportDialog()
+    local dialog = CreateFrame("Frame", "EWLImportDialog", UIParent, "BackdropTemplate")
+    dialog:SetSize(520, 380)
+    dialog:SetPoint("CENTER")
+    dialog:SetFrameStrata("DIALOG")
+    dialog:SetMovable(true)
+    dialog:EnableMouse(true)
+    dialog:RegisterForDrag("LeftButton")
+    dialog:SetScript("OnDragStart", dialog.StartMoving)
+    dialog:SetScript("OnDragStop", dialog.StopMovingOrSizing)
+
+    dialog:SetBackdrop({
+        bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        tile = true, tileSize = 32, edgeSize = 32,
+        insets = { left = 11, right = 12, top = 12, bottom = 11 },
+    })
+
+    -- Title
+    local title = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOP", 0, -16)
+    title:SetText("EasyWishlist — Import Report")
+
+    -- Instructions
+    local instructions = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    instructions:SetPoint("TOP", 0, -44)
+    instructions:SetText("Paste your Questionably Epic JSON export below:")
+    instructions:SetTextColor(0.8, 0.8, 0.8)
+
+    -- EditBox scroll frame
+    local scrollFrame = CreateFrame("ScrollFrame", nil, dialog, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT", 20, -70)
+    scrollFrame:SetPoint("BOTTOMRIGHT", -36, 60)
+
+    local editBox = CreateFrame("EditBox", nil, scrollFrame)
+    editBox:SetMultiLine(true)
+    editBox:SetAutoFocus(false)
+    editBox:SetFontObject(ChatFontNormal)
+    editBox:SetWidth(scrollFrame:GetWidth())
+    editBox:SetScript("OnEscapePressed", function() dialog:Hide() end)
+    editBox:SetScript("OnTextChanged", function(self)
+        -- Clear error when user starts editing
+        dialog.errorLabel:SetText("")
+    end)
+    scrollFrame:SetScrollChild(editBox)
+
+    -- Scroll frame background
+    local scrollBg = scrollFrame:CreateTexture(nil, "BACKGROUND")
+    scrollBg:SetAllPoints(scrollFrame)
+    scrollBg:SetColorTexture(0, 0, 0, 0.4)
+
+    -- Error label
+    local errorLabel = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    errorLabel:SetPoint("BOTTOMLEFT", 20, 38)
+    errorLabel:SetPoint("BOTTOMRIGHT", -20, 38)
+    errorLabel:SetTextColor(1, 0.3, 0.3)
+    errorLabel:SetJustifyH("LEFT")
+    errorLabel:SetText("")
+    dialog.errorLabel = errorLabel
+
+    -- Import button
+    local importBtn = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
+    importBtn:SetSize(100, 24)
+    importBtn:SetPoint("BOTTOMRIGHT", -20, 14)
+    importBtn:SetText("Import")
+    importBtn:SetScript("OnClick", function()
+        local text = editBox:GetText()
+        if not text or text:match("^%s*$") then
+            errorLabel:SetText("Please paste a QE JSON report first.")
+            return
+        end
+
+        local data, err = EWL.ParseJSON(text)
+        if not data then
+            errorLabel:SetText("Invalid JSON: " .. (err or "unknown error"))
+            return
+        end
+
+        local ok, saveErr = EWL.SaveReport(data)
+        if not ok then
+            errorLabel:SetText("Import failed: " .. (saveErr or "unknown error"))
+            return
+        end
+
+        editBox:SetText("")
+        dialog:Hide()
+        EWL.RefreshMainWindow()
+        print("|cff00ff96EasyWishlist:|r Report imported successfully for " .. (data.spec or "unknown spec") .. ".")
+    end)
+
+    -- Cancel button
+    local cancelBtn = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
+    cancelBtn:SetSize(100, 24)
+    cancelBtn:SetPoint("BOTTOMRIGHT", importBtn, "BOTTOMLEFT", -8, 0)
+    cancelBtn:SetText("Cancel")
+    cancelBtn:SetScript("OnClick", function()
+        editBox:SetText("")
+        errorLabel:SetText("")
+        dialog:Hide()
+    end)
+
+    -- Close on Escape via UISpecialFrames
+    tinsert(UISpecialFrames, "EWLImportDialog")
+
+    dialog.editBox = editBox
+    dialog:Hide()
+    return dialog
+end
+
+function EWL.OpenImportDialog()
+    if not importDialog then
+        importDialog = CreateImportDialog()
+    end
+    importDialog.errorLabel:SetText("")
+    importDialog:Show()
+    importDialog.editBox:SetFocus()
+end
