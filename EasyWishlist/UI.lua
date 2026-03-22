@@ -103,6 +103,24 @@ local function GetRow(parent)
         if self.itemID then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
             GameTooltip:SetItemByID(self.itemID)
+            -- Append QE sim data so the correct scaled ilvl is always visible
+            if self.result then
+                local r = self.result
+                local pctR, pctG, pctB = PctColor(r.percDiff or 0)
+                GameTooltip:AddLine(" ")
+                GameTooltip:AddDoubleLine(
+                    "Item Level (sim):",
+                    tostring(r.level or "?"),
+                    0.7, 0.9, 1,  -- label: light blue
+                    0.7, 0.9, 1   -- value: light blue
+                )
+                GameTooltip:AddDoubleLine(
+                    "Upgrade:",
+                    string.format("+%.2f%%", r.percDiff or 0),
+                    pctR, pctG, pctB,
+                    pctR, pctG, pctB
+                )
+            end
             GameTooltip:Show()
         end
     end)
@@ -126,6 +144,7 @@ local pendingItems = {}  -- itemID -> true, waiting for cache
 
 local function PopulateRow(row, result, rank, isEven)
     row.itemID = result.item
+    row.result = result
     row:SetWidth(WINDOW_W - 20)
 
     -- Alternating background
