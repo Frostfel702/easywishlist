@@ -1,4 +1,4 @@
-## Interface: 110107
+## Interface: 120001
 ## Title: EasyWishlist
 ## Notes: Track your best gear upgrades from Questionably Epic sim reports
 ## Version: 1.0.0
