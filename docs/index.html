@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>EasyWishlist — Raidbots Extractor</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Variables ──────────────────────────────────────────────────────── */
+    :root {
+      --bg:          #09090f;
+      --bg-panel:    #0f0f18;
+      --bg-raised:   #16161f;
+      --bg-input:    #0c0c14;
+      --gold:        #ffd700;
+      --gold-dark:   #c8a415;
+      --gold-muted:  rgba(255, 215, 0, 0.18);
+      --gold-border: rgba(255, 215, 0, 0.25);
+      --green:       #00ff96;
+      --green-muted: rgba(0, 255, 150, 0.12);
+      --red:         #ff5555;
+      --text:        #e2ceaa;
+      --text-muted:  #6b6050;
+      --text-dim:    #9a8870;
+      --border:      rgba(255, 255, 255, 0.06);
+      --radius:      6px;
+    }
+
+    /* ── Reset & base ───────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      min-height: 100vh;
+      background-image:
+        radial-gradient(ellipse 80% 40% at 10% -10%, rgba(0,255,150,0.04) 0%, transparent 60%),
+        radial-gradient(ellipse 60% 50% at 90% 110%, rgba(255,215,0,0.05) 0%, transparent 60%);
+    }
+
+    a { color: var(--green); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Header ─────────────────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 20px 48px;
+      border-bottom: 1px solid var(--gold-border);
+      background: linear-gradient(180deg, rgba(255,215,0,0.03) 0%, transparent 100%);
+    }
+
+    .logo {
+      font-family: 'Cinzel', serif;
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--text);
+    }
+    .logo .easy { color: var(--green); }
+
+    .logo-sep {
+      width: 1px;
+      height: 18px;
+      background: var(--gold-border);
+    }
+
+    .header-subtitle {
+      font-size: 12px;
+      font-weight: 500;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--gold);
+      opacity: 0.8;
+    }
+
+    .header-right {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .gh-link {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--text-dim);
+      transition: color 0.2s;
+    }
+    .gh-link:hover { color: var(--text); text-decoration: none; }
+
+    /* ── Main layout ────────────────────────────────────────────────────── */
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 52px 24px 80px;
+    }
+
+    /* ── Hero ───────────────────────────────────────────────────────────── */
+    .hero {
+      text-align: center;
+      margin-bottom: 52px;
+    }
+
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 16px;
+    }
+
+    .hero-eyebrow::before,
+    .hero-eyebrow::after {
+      content: '';
+      display: block;
+      width: 28px;
+      height: 1px;
+      background: var(--gold-border);
+    }
+
+    .hero h1 {
+      font-family: 'Cinzel', serif;
+      font-size: 36px;
+      font-weight: 700;
+      color: var(--gold);
+      letter-spacing: 0.02em;
+      line-height: 1.2;
+      margin-bottom: 14px;
+      text-shadow: 0 0 40px rgba(255, 215, 0, 0.2);
+    }
+
+    .hero p {
+      color: var(--text-dim);
+      font-size: 15px;
+      max-width: 520px;
+      margin: 0 auto;
+    }
+
+    /* ── Steps ──────────────────────────────────────────────────────────── */
+    .steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-bottom: 40px;
+      position: relative;
+    }
+
+    .steps::before {
+      content: '';
+      position: absolute;
+      top: 24px;
+      left: calc(33.33% + 8px);
+      right: calc(33.33% + 8px);
+      height: 1px;
+      background: linear-gradient(90deg, var(--gold-border), var(--gold-border));
+      pointer-events: none;
+    }
+
+    .step {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 16px;
+      position: relative;
+    }
+
+    .step-num {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      border: 1px solid var(--gold-border);
+      background: var(--bg-raised);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Cinzel', serif;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--gold);
+      margin-bottom: 12px;
+    }
+
+    .step-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+
+    .step p {
+      font-size: 12px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* ── Panel ──────────────────────────────────────────────────────────── */
+    .panel {
+      background: var(--bg-panel);
+      border: 1px solid var(--gold-border);
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+
+    .panel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 13px 20px;
+      border-bottom: 1px solid var(--border);
+      background: linear-gradient(180deg, rgba(255,215,0,0.04) 0%, transparent 100%);
+    }
+
+    .panel-title {
+      font-family: 'Cinzel', serif;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--gold);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .panel-title svg { opacity: 0.7; }
+
+    .panel-body { padding: 20px; }
+
+    /* ── Textarea ───────────────────────────────────────────────────────── */
+    textarea {
+      width: 100%;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: 'Inter', monospace;
+      font-size: 12px;
+      padding: 14px;
+      resize: vertical;
+      outline: none;
+      transition: border-color 0.2s;
+      min-height: 130px;
+    }
+
+    textarea:focus { border-color: rgba(255, 215, 0, 0.4); }
+    textarea::placeholder { color: var(--text-muted); }
+    textarea[readonly] {
+      color: var(--green);
+      cursor: text;
+      min-height: unset;
+      resize: none;
+    }
+
+    /* ── Buttons ────────────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      border: none;
+      border-radius: var(--radius);
+      font-family: 'Cinzel', serif;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      transition: all 0.18s;
+      white-space: nowrap;
+    }
+
+    .btn-extract {
+      width: 100%;
+      padding: 14px;
+      margin-top: 14px;
+      background: linear-gradient(180deg, #ffd700 0%, #c8a415 100%);
+      color: #100d00;
+      font-size: 14px;
+      box-shadow: 0 2px 12px rgba(200, 164, 21, 0.25);
+    }
+
+    .btn-extract:hover:not(:disabled) {
+      background: linear-gradient(180deg, #ffe033 0%, #d4b01a 100%);
+      transform: translateY(-1px);
+      box-shadow: 0 4px 20px rgba(200, 164, 21, 0.4);
+    }
+
+    .btn-extract:active:not(:disabled) { transform: translateY(0); }
+
+    .btn-extract:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      transform: none !important;
+      box-shadow: none !important;
+    }
+
+    .btn-copy {
+      padding: 7px 14px;
+      background: var(--green-muted);
+      color: var(--green);
+      border: 1px solid rgba(0, 255, 150, 0.3);
+      font-size: 11px;
+    }
+
+    .btn-copy:hover { background: rgba(0, 255, 150, 0.2); }
+
+    .btn-copy.done {
+      background: rgba(0, 255, 150, 0.2);
+      border-color: var(--green);
+    }
+
+    /* ── Error ──────────────────────────────────────────────────────────── */
+    .error {
+      display: none;
+      margin-top: 12px;
+      padding: 12px 14px;
+      background: rgba(255, 85, 85, 0.08);
+      border: 1px solid rgba(255, 85, 85, 0.25);
+      border-radius: var(--radius);
+      color: var(--red);
+      font-size: 13px;
+    }
+
+    /* ── Stats row ──────────────────────────────────────────────────────── */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .stat {
+      background: var(--bg-raised);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 13px 14px;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      margin-bottom: 5px;
+    }
+
+    .stat-value {
+      font-family: 'Cinzel', serif;
+      font-size: 15px;
+      color: var(--gold);
+      line-height: 1.2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .stat-value.green { color: var(--green); }
+
+    /* ── Output row ─────────────────────────────────────────────────────── */
+    .output-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .output-label {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    /* ── Divider ornament ───────────────────────────────────────────────── */
+    .ornament {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin: 24px 0 20px;
+    }
+
+    .ornament-line {
+      flex: 1;
+      height: 1px;
+      background: var(--gold-border);
+    }
+
+    .ornament-icon {
+      font-size: 10px;
+      color: var(--gold);
+      opacity: 0.6;
+      letter-spacing: 4px;
+    }
+
+    /* ── Preview table ──────────────────────────────────────────────────── */
+    .preview-label {
+      font-family: 'Cinzel', serif;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 12px;
+      opacity: 0.7;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    thead tr {
+      background: var(--bg-raised);
+      border-bottom: 1px solid var(--gold-border);
+    }
+
+    th {
+      font-family: 'Cinzel', serif;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--gold);
+      padding: 10px 14px;
+      text-align: left;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 9px 14px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text-dim);
+      vertical-align: middle;
+    }
+
+    tbody tr:last-child td { border-bottom: none; }
+
+    tbody tr:hover td { background: rgba(255, 255, 255, 0.02); }
+
+    .td-rank {
+      font-size: 11px;
+      color: var(--text-muted);
+      width: 32px;
+    }
+
+    .td-item {
+      font-family: monospace;
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    .slot-chip {
+      display: inline-block;
+      padding: 2px 8px;
+      background: var(--bg-raised);
+      border: 1px solid var(--border);
+      border-radius: 3px;
+      font-size: 11px;
+      font-family: monospace;
+      color: var(--text-dim);
+    }
+
+    .td-upgrade {
+      font-weight: 600;
+      color: var(--green);
+      font-size: 13px;
+    }
+
+    .td-source { font-size: 12px; }
+
+    /* ── URL input row ──────────────────────────────────────────────────── */
+    .url-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .url-input {
+      flex: 1;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 13px;
+      padding: 10px 14px;
+      outline: none;
+      transition: border-color 0.2s;
+      min-width: 0;
+    }
+
+    .url-input:focus { border-color: rgba(255, 215, 0, 0.4); }
+    .url-input::placeholder { color: var(--text-muted); }
+
+    /* ── Manual fallback ────────────────────────────────────────────────── */
+    .manual-fallback {
+      margin-top: 16px;
+      border-top: 1px solid var(--border);
+      padding-top: 14px;
+    }
+
+    .manual-fallback summary {
+      font-size: 12px;
+      color: var(--text-muted);
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: color 0.2s;
+    }
+
+    .manual-fallback summary:hover { color: var(--text-dim); }
+
+    .manual-fallback summary::before {
+      content: '›';
+      font-size: 14px;
+      transition: transform 0.2s;
+      display: inline-block;
+    }
+
+    .manual-fallback[open] summary::before { transform: rotate(90deg); }
+
+    /* ── Hidden ─────────────────────────────────────────────────────────── */
+    .hidden { display: none !important; }
+
+    /* ── Footer ─────────────────────────────────────────────────────────── */
+    footer {
+      text-align: center;
+      padding: 32px 24px;
+      border-top: 1px solid var(--border);
+      color: var(--text-muted);
+      font-size: 12px;
+    }
+
+    footer a { color: var(--text-muted); }
+    footer a:hover { color: var(--text-dim); }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Responsive ─────────────────────────────────────────────────────── */
+    @media (max-width: 640px) {
+      header { padding: 16px 20px; }
+      main { padding: 36px 16px 60px; }
+      .hero h1 { font-size: 26px; }
+      .steps { grid-template-columns: 1fr; }
+      .steps::before { display: none; }
+      .stats-row { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────── -->
+<header>
+  <div class="logo"><span class="easy">Easy</span>Wishlist</div>
+  <div class="logo-sep"></div>
+  <div class="header-subtitle">Raidbots Extractor</div>
+  <div class="header-right">
+    <a class="gh-link" href="https://github.com/alvadin/easywishlist" target="_blank" rel="noopener">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+          0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13
+          -.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66
+          .07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15
+          -.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27
+          .68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12
+          .51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48
+          0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+      </svg>
+      GitHub
+    </a>
+  </div>
+</header>
+
+<!-- ── Main ────────────────────────────────────────────────────────────── -->
+<main>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-eyebrow">WoW Addon Tool</div>
+    <h1>Raidbots Droptimizer<br>Extractor</h1>
+    <p>Convert your Raidbots Droptimizer report into a compact format you can paste directly into EasyWishlist in-game.</p>
+  </div>
+
+  <!-- Steps -->
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">1</div>
+      <div class="step-title">Run Droptimizer</div>
+      <p>Run a <a href="https://www.raidbots.com/simbot/droptimizer" target="_blank" rel="noopener">Droptimizer</a> sim on Raidbots for your character.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">2</div>
+      <div class="step-title">Copy the Report URL</div>
+      <p>Copy the URL from your browser — e.g. <span style="color:var(--text-dim);font-family:monospace;font-size:11px">raidbots.com/simbot/report/…</span></p>
+    </div>
+    <div class="step">
+      <div class="step-num">3</div>
+      <div class="step-title">Import in WoW</div>
+      <p>Paste URL below, click Extract, then copy the output into <strong style="color:var(--text)">EasyWishlist &rarr; Import</strong>.</p>
+    </div>
+  </div>
+
+  <!-- Input panel -->
+  <div class="panel" id="inputPanel">
+    <div class="panel-header">
+      <div class="panel-title">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+          <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+        </svg>
+        Raidbots Report URL
+      </div>
+    </div>
+    <div class="panel-body">
+      <div class="url-row">
+        <input id="reportUrl" type="url" class="url-input"
+          placeholder="https://www.raidbots.com/simbot/report/…" />
+        <button class="btn btn-extract" id="extractBtn" style="width:auto;margin-top:0;padding:0 22px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+          Extract
+        </button>
+      </div>
+
+      <div class="error" id="errorBox"></div>
+
+      <!-- Manual fallback -->
+      <details class="manual-fallback" id="manualFallback">
+        <summary>Or paste JSON manually</summary>
+        <textarea id="inputJson" placeholder="Paste your full Raidbots Droptimizer data.json here…&#10;&#10;The file can be several MB — that's expected." style="margin-top:12px"></textarea>
+      </details>
+    </div>
+  </div>
+
+  <!-- Output panel (hidden until extraction) -->
+  <div class="panel hidden" id="outputPanel">
+    <div class="panel-header">
+      <div class="panel-title">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        Extracted Data
+      </div>
+    </div>
+    <div class="panel-body">
+
+      <!-- Stats -->
+      <div class="stats-row" id="statsRow"></div>
+
+      <!-- Compact output -->
+      <div class="output-row">
+        <span class="output-label">Paste this string into <strong style="color:var(--text)">EasyWishlist &rarr; Import</strong> in-game</span>
+        <button class="btn btn-copy" id="copyBtn">Copy to Clipboard</button>
+      </div>
+      <textarea id="outputJson" readonly rows="3"></textarea>
+
+      <!-- Top items preview -->
+      <div class="ornament">
+        <div class="ornament-line"></div>
+        <div class="ornament-icon">&#9670; &#9670; &#9670;</div>
+        <div class="ornament-line"></div>
+      </div>
+
+      <div class="preview-label">Top Upgrades Preview</div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Item ID</th>
+              <th>Slot</th>
+              <th>ilvl</th>
+              <th>Source</th>
+              <th>Upgrade</th>
+            </tr>
+          </thead>
+          <tbody id="previewBody"></tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+</main>
+
+<!-- ── Footer ──────────────────────────────────────────────────────────── -->
+<footer>
+  <p>EasyWishlist &mdash; WoW Addon &mdash; <a href="https://github.com/alvadin/easywishlist" target="_blank" rel="noopener">GitHub</a></p>
+  <p style="margin-top:6px; font-size:11px; opacity:0.5;">All processing happens locally in your browser. Nothing is uploaded.</p>
+</footer>
+
+<script>
+  // ── Parse a profileset name string ──────────────────────────────────────
+  // Format: -1/-1/dungeon-mythic-weekly10/193708/272/0/finger1///[extra]
+  function parseName(name) {
+    const parts = name.split('/');
+    if (parts.length < 7) return null;
+
+    const contentStr = parts[2];
+    const itemID     = parseInt(parts[3], 10);
+    const ilvl       = parseInt(parts[4], 10);
+    const slot       = parts[6];
+
+    if (!itemID || !ilvl || !contentStr || !slot) return null;
+
+    const keyMatch    = contentStr.match(/(\d+)$/);
+    const keyLevel    = keyMatch ? parseInt(keyMatch[1], 10) : null;
+
+    let dropLoc, dropDifficulty;
+
+    if (contentStr.startsWith('dungeon')) {
+      dropLoc = 'Dungeon';
+      dropDifficulty = keyLevel;
+    } else if (contentStr.startsWith('raid')) {
+      dropLoc = 'Raid';
+      if      (contentStr.includes('normal'))  dropDifficulty = 4;
+      else if (contentStr.includes('heroic'))  dropDifficulty = 5;
+      else if (contentStr.includes('mythic'))  dropDifficulty = 6;
+      else                                     dropDifficulty = keyLevel;
+    } else {
+      return null;
+    }
+
+    return { itemID, ilvl, slot, dropLoc, dropDifficulty };
+  }
+
+  // ── Main extraction ──────────────────────────────────────────────────────
+  function extract(jsonText) {
+    let data;
+    try {
+      data = JSON.parse(jsonText);
+    } catch {
+      throw new Error('Invalid JSON — make sure you copied the full file contents.');
+    }
+
+    if (!data.sim)
+      throw new Error('This doesn\'t look like a Raidbots report (missing "sim" field).');
+    if (!data.sim.profilesets || !data.sim.profilesets.results || !data.sim.profilesets.results.length)
+      throw new Error('No Droptimizer profilesets found. Make sure this is a Droptimizer report, not a Quick Sim.');
+
+    const player   = data.sim.players && data.sim.players[0];
+    const baseline = player && player.collected_data && player.collected_data.dps && player.collected_data.dps.mean;
+    if (!baseline)
+      throw new Error('Could not find baseline DPS. The report may be incomplete.');
+
+    const spec       = (player.specialization || 'Unknown');
+    const playerName = (player.name || 'Unknown');
+    const date       = data.build_date || '';
+
+    // Infer content type and ufSettings from results
+    let maxKeyLevel = 0;
+    const raidDiffs = new Set();
+
+    // Deduplicate by itemID — keep the result with the highest DPS gain
+    const bestPerItem = {};
+
+    for (const result of data.sim.profilesets.results) {
+      const parsed = parseName(result.name);
+      if (!parsed) continue;
+
+      const percDiff = ((result.mean - baseline) / baseline) * 100;
+      if (percDiff <= 0) continue;
+
+      const { itemID, ilvl, slot, dropLoc, dropDifficulty } = parsed;
+
+      if (!bestPerItem[itemID] || percDiff > bestPerItem[itemID].percDiff) {
+        bestPerItem[itemID] = { itemID, ilvl, slot, dropLoc, dropDifficulty, percDiff };
+      }
+
+      if (dropLoc === 'Dungeon' && dropDifficulty > maxKeyLevel) maxKeyLevel = dropDifficulty;
+      if (dropLoc === 'Raid'    && dropDifficulty)              raidDiffs.add(dropDifficulty);
+    }
+
+    const results = Object.values(bestPerItem)
+      .sort((a, b) => b.percDiff - a.percDiff);
+
+    if (results.length === 0)
+      throw new Error('No upgrades found in this report. All items performed below your current gear.');
+
+    // Determine dominant content type
+    const dungeonCount = results.filter(r => r.dropLoc === 'Dungeon').length;
+    const raidCount    = results.filter(r => r.dropLoc === 'Raid').length;
+    const contentType  = dungeonCount >= raidCount ? 'Dungeon' : 'Raid';
+
+    // Build ufSettings for header display
+    const ufSettings = {};
+    if (maxKeyLevel > 0)       ufSettings.dungeon = maxKeyLevel;
+    if (raidDiffs.size > 0)    ufSettings.raid    = [...raidDiffs];
+
+    // Compact output — field names match what the addon's SaveReport expects
+    const compact = {
+      type:        'raidbots',
+      spec,
+      playername:  playerName,
+      date,
+      contentType,
+      ufSettings,
+      results: results.map(r => ({
+        item:           r.itemID,
+        level:          r.ilvl,
+        dropLoc:        r.dropLoc,
+        dropDifficulty: r.dropDifficulty,
+        percDiff:       Math.round(r.percDiff * 1000) / 1000,
+      })),
+    };
+
+    return { compact, results, baseline, spec, playerName, date };
+  }
+
+  // ── Helpers ──────────────────────────────────────────────────────────────
+  const EXTRACT_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`;
+
+  function reportIdFromUrl(url) {
+    const m = url.match(/(?:simbot\/report|reports)\/([a-zA-Z0-9]+)/);
+    return m ? m[1] : null;
+  }
+
+  function setExtracting(on) {
+    extractBtn.disabled = on;
+    extractBtn.innerHTML = on
+      ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="animation:spin 1s linear infinite"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg> Fetching…'
+      : EXTRACT_ICON + ' Extract';
+  }
+
+  // ── Render output ────────────────────────────────────────────────────────
+  function renderOutput({ compact, results, baseline, spec, playerName }) {
+    outputJson.value = JSON.stringify(compact);
+    outputPanel.classList.remove('hidden');
+
+    statsRow.innerHTML = `
+      <div class="stat">
+        <div class="stat-label">Player</div>
+        <div class="stat-value" title="${esc(playerName)}">${esc(playerName)}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Spec</div>
+        <div class="stat-value" style="font-size:12px" title="${esc(spec)}">${esc(spec)}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Baseline DPS</div>
+        <div class="stat-value">${Math.round(baseline).toLocaleString()}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Upgrades Found</div>
+        <div class="stat-value green">${results.length}</div>
+      </div>
+    `;
+
+    const diffLabels = { 4: 'Normal', 5: 'Heroic', 6: 'Mythic' };
+    previewBody.innerHTML = results.slice(0, 20).map((r, i) => {
+      const source = r.dropLoc === 'Dungeon'
+        ? `M+${r.dropDifficulty}`
+        : (diffLabels[r.dropDifficulty] || `Diff ${r.dropDifficulty}`);
+      return `
+        <tr>
+          <td class="td-rank">${i + 1}</td>
+          <td class="td-item">${r.itemID}</td>
+          <td><span class="slot-chip">${esc(r.slot)}</span></td>
+          <td>${r.ilvl}</td>
+          <td class="td-source">${esc(r.dropLoc)} ${esc(source)}</td>
+          <td class="td-upgrade">+${r.percDiff.toFixed(3)}%</td>
+        </tr>`;
+    }).join('');
+
+    outputPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  // ── UI wiring ────────────────────────────────────────────────────────────
+  const reportUrl   = document.getElementById('reportUrl');
+  const inputJson   = document.getElementById('inputJson');
+  const extractBtn  = document.getElementById('extractBtn');
+  const outputPanel = document.getElementById('outputPanel');
+  const outputJson  = document.getElementById('outputJson');
+  const errorBox    = document.getElementById('errorBox');
+  const statsRow    = document.getElementById('statsRow');
+  const previewBody = document.getElementById('previewBody');
+  const copyBtn     = document.getElementById('copyBtn');
+  const manualFallback = document.getElementById('manualFallback');
+
+  extractBtn.addEventListener('click', async () => {
+    errorBox.style.display = 'none';
+
+    const url  = reportUrl.value.trim();
+    const text = inputJson.value.trim();
+
+    // ── URL path (primary) ──────────────────────────────────────────────
+    if (url) {
+      const reportId = reportIdFromUrl(url);
+      if (!reportId) {
+        showError('Could not parse the report ID from that URL. Expected a Raidbots report link.');
+        return;
+      }
+
+      setExtracting(true);
+      try {
+        const dataUrl  = `https://www.raidbots.com/reports/${reportId}/data.json`;
+        const response = await fetch(dataUrl);
+        if (!response.ok) throw new Error(`Raidbots returned ${response.status}. The report may be private or expired.`);
+        const json = await response.text();
+        renderOutput(extract(json));
+      } catch (e) {
+        if (e instanceof TypeError) {
+          // Likely a CORS/network error
+          showError('Could not fetch the report directly (network or CORS error). Use the manual paste option below instead.');
+          manualFallback.open = true;
+        } else {
+          showError(e.message);
+        }
+      } finally {
+        setExtracting(false);
+      }
+      return;
+    }
+
+    // ── Manual paste fallback ───────────────────────────────────────────
+    if (!text) {
+      showError('Paste a Raidbots report URL above, or expand "Or paste JSON manually" below.');
+      return;
+    }
+
+    setExtracting(true);
+    // Defer to let the browser repaint before the heavy JSON.parse
+    setTimeout(() => {
+      try {
+        renderOutput(extract(text));
+      } catch (e) {
+        showError(e.message);
+      } finally {
+        setExtracting(false);
+      }
+    }, 16);
+  });
+
+  // Also trigger on Enter in the URL field
+  reportUrl.addEventListener('keydown', e => {
+    if (e.key === 'Enter') extractBtn.click();
+  });
+
+  copyBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(outputJson.value).then(() => {
+      copyBtn.textContent = '✓ Copied!';
+      copyBtn.classList.add('done');
+      setTimeout(() => {
+        copyBtn.textContent = 'Copy to Clipboard';
+        copyBtn.classList.remove('done');
+      }, 2500);
+    });
+  });
+
+  function showError(msg) {
+    errorBox.textContent = msg;
+    errorBox.style.display = 'block';
+  }
+
+  function esc(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+</script>
+
+</body>
+</html>

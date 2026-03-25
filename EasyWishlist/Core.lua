@@ -47,8 +47,9 @@ function EWL.SaveReport(data)
     if not data.playername then
         return false, "Missing 'playername' field"
     end
-    if not data.realm then
-        return false, "Missing 'realm' field"
+    -- realm is optional (Raidbots exports don't include it)
+    if data.realm == nil then
+        data.realm = ""
     end
     if #data.results == 0 then
         return false, "Results list is empty"

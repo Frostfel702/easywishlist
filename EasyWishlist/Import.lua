@@ -81,6 +81,11 @@ local function CreateImportDialog()
             return
         end
 
+        -- Detect format and normalise to the common structure
+        if EWL.IsRaidbotsFormat(data) then
+            data = EWL.NormalizeRaidbots(data)
+        end
+
         local ok, saveErr = EWL.SaveReport(data)
         if not ok then
             errorLabel:SetText("Import failed: " .. (saveErr or "unknown error"))
