@@ -88,11 +88,11 @@ function EWL.GetDifficultyLabel(report)
     if not report or not report.ufSettings then return "" end
     local ct = report.contentType
     if ct == "Dungeon" then
-        return "M+" .. (report.ufSettings.dungeon or "?")
+        return "Mythic+"
     elseif ct == "Raid" then
         local raid = report.ufSettings.raid
         if type(raid) == "table" then
-            local labels = { [2] = "Normal", [4] = "Heroic", [6] = "Mythic" }
+            local labels = { [0]="LFR", [1]="LFR", [2]="Normal", [3]="Normal", [4]="Heroic", [5]="Heroic", [6]="Mythic", [7]="Mythic" }
             local parts = {}
             for _, v in ipairs(raid) do
                 parts[#parts + 1] = labels[v] or ("Diff " .. v)
