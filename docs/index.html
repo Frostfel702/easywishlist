@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>EasyWishlist — Raidbots Extractor</title>
+  <title>EasyWishlist — Sim Report Extractor</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <style>
@@ -574,7 +574,7 @@
 <header>
   <div class="logo"><span class="easy">Easy</span>Wishlist</div>
   <div class="logo-sep"></div>
-  <div class="header-subtitle">Raidbots Extractor</div>
+  <div class="header-subtitle">Sim Report Extractor</div>
   <div class="header-right">
     <a class="gh-link" href="https://github.com/alvadin/easywishlist" target="_blank" rel="noopener">
       <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
@@ -598,21 +598,21 @@
   <!-- Hero -->
   <div class="hero">
     <div class="hero-eyebrow">WoW Addon Tool</div>
-    <h1>Raidbots Droptimizer<br>Extractor</h1>
-    <p>Convert your Raidbots Droptimizer report into a compact format you can paste directly into EasyWishlist in-game.</p>
+    <h1>Sim Report<br>Extractor</h1>
+    <p>Paste a <strong style="color:var(--text)">Raidbots</strong> or <strong style="color:var(--text)">Questionably Epic</strong> report URL and get a compact string ready to paste into EasyWishlist in-game.</p>
   </div>
 
   <!-- Steps -->
   <div class="steps">
     <div class="step">
       <div class="step-num">1</div>
-      <div class="step-title">Run Droptimizer</div>
-      <p>Run a <a href="https://www.raidbots.com/simbot/droptimizer" target="_blank" rel="noopener">Droptimizer</a> sim on Raidbots for your character.</p>
+      <div class="step-title">Run a Sim</div>
+      <p>Run a <a href="https://www.raidbots.com/simbot/droptimizer" target="_blank" rel="noopener">Droptimizer</a> on Raidbots or an upgrade report on <a href="https://questionablyepic.com" target="_blank" rel="noopener">Questionably Epic</a>.</p>
     </div>
     <div class="step">
       <div class="step-num">2</div>
       <div class="step-title">Copy the Report URL</div>
-      <p>Copy the URL from your browser — e.g. <span style="color:var(--text-dim);font-family:monospace;font-size:11px">raidbots.com/simbot/report/…</span></p>
+      <p>Copy the report URL from your browser address bar.</p>
     </div>
     <div class="step">
       <div class="step-num">3</div>
@@ -635,7 +635,7 @@
     <div class="panel-body">
       <div class="url-row">
         <input id="reportUrl" type="url" class="url-input"
-          placeholder="https://www.raidbots.com/simbot/report/…" />
+          placeholder="https://www.raidbots.com/simbot/report/… or https://questionablyepic.com/live/upgradereport/…" />
         <button class="btn btn-extract" id="extractBtn" style="width:auto;margin-top:0;padding:0 22px;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
             <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
@@ -712,6 +712,23 @@
 </footer>
 
 <script>
+  // ── URL detection ───────────────────────────────────────────────────────
+  function detectSource(url) {
+    if (/raidbots\.com/.test(url))         return 'raidbots';
+    if (/questionablyepic\.com/.test(url)) return 'qe';
+    return null;
+  }
+
+  function raidbotsReportId(url) {
+    const m = url.match(/(?:simbot\/report|reports)\/([a-zA-Z0-9]+)/);
+    return m ? m[1] : null;
+  }
+
+  function qeReportId(url) {
+    const m = url.match(/upgradereport\/([a-zA-Z0-9]+)/);
+    return m ? m[1] : null;
+  }
+
   // ── Parse a profileset name string ──────────────────────────────────────
   // Format: -1/-1/dungeon-mythic-weekly10/193708/272/0/finger1///[extra]
   function parseName(name) {
@@ -829,13 +846,56 @@
     return { compact, results, baseline, spec, playerName, date };
   }
 
+  // ── QE extraction ───────────────────────────────────────────────────────
+  // QE API response is double-encoded: the whole JSON object is a string value.
+  function extractQE(rawText) {
+    let data = JSON.parse(rawText);
+    if (typeof data === 'string') data = JSON.parse(data); // unwrap double-encoding
+
+    if (!data.results || !Array.isArray(data.results))
+      throw new Error('This doesn\'t look like a QE Upgrade Report (missing "results" field).');
+    if (!data.spec)
+      throw new Error('Missing "spec" field in QE report.');
+
+    const results = data.results
+      .filter(r => r.percDiff && r.percDiff > 0 && r.item)
+      .sort((a, b) => b.percDiff - a.percDiff);
+
+    if (results.length === 0)
+      throw new Error('No upgrades found in this QE report.');
+
+    // QE JSON is already in the format the addon expects — pass it through as-is
+    // (no "type" field needed; the addon detects QE format by absence of type:"raidbots")
+    const compact = {
+      id:          data.id,
+      dateCreated: data.dateCreated,
+      playername:  data.playername,
+      realm:       data.realm,
+      spec:        data.spec,
+      contentType: data.contentType,
+      ufSettings:  data.ufSettings,
+      gameType:    data.gameType || 'Retail',
+      results,
+    };
+
+    return {
+      compact,
+      results: results.map(r => ({
+        itemID:         r.item,
+        ilvl:           r.level,
+        slot:           null,
+        dropLoc:        r.dropLoc,
+        dropDifficulty: r.dropDifficulty,
+        percDiff:       r.percDiff,
+      })),
+      baseline:   null,
+      spec:       data.spec,
+      playerName: data.playername || 'Unknown',
+    };
+  }
+
   // ── Helpers ──────────────────────────────────────────────────────────────
   const EXTRACT_ICON = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`;
-
-  function reportIdFromUrl(url) {
-    const m = url.match(/(?:simbot\/report|reports)\/([a-zA-Z0-9]+)/);
-    return m ? m[1] : null;
-  }
 
   function setExtracting(on) {
     extractBtn.disabled = on;
@@ -860,7 +920,7 @@
       </div>
       <div class="stat">
         <div class="stat-label">Baseline DPS</div>
-        <div class="stat-value">${Math.round(baseline).toLocaleString()}</div>
+        <div class="stat-value">${baseline != null ? Math.round(baseline).toLocaleString() : '—'}</div>
       </div>
       <div class="stat">
         <div class="stat-label">Upgrades Found</div>
@@ -877,8 +937,8 @@
         <tr>
           <td class="td-rank">${i + 1}</td>
           <td class="td-item">${r.itemID}</td>
-          <td><span class="slot-chip">${esc(r.slot)}</span></td>
-          <td>${r.ilvl}</td>
+          <td>${r.slot ? `<span class="slot-chip">${esc(r.slot)}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
+          <td>${r.ilvl || '—'}</td>
           <td class="td-source">${esc(r.dropLoc)} ${esc(source)}</td>
           <td class="td-upgrade">+${r.percDiff.toFixed(3)}%</td>
         </tr>`;
@@ -907,22 +967,38 @@
 
     // ── URL path (primary) ──────────────────────────────────────────────
     if (url) {
-      const reportId = reportIdFromUrl(url);
-      if (!reportId) {
-        showError('Could not parse the report ID from that URL. Expected a Raidbots report link.');
+      const source = detectSource(url);
+      if (!source) {
+        showError('URL not recognised. Paste a Raidbots or Questionably Epic report URL.');
         return;
       }
 
       setExtracting(true);
       try {
-        const dataUrl  = `https://www.raidbots.com/reports/${reportId}/data.json`;
-        const response = await fetch(dataUrl);
-        if (!response.ok) throw new Error(`Raidbots returned ${response.status}. The report may be private or expired.`);
-        const json = await response.text();
-        renderOutput(extract(json));
+        let dataUrl, json, output;
+
+        if (source === 'raidbots') {
+          const id = raidbotsReportId(url);
+          if (!id) throw new Error('Could not parse the report ID from that Raidbots URL.');
+          dataUrl  = `https://www.raidbots.com/reports/${id}/data.json`;
+          const response = await fetch(dataUrl);
+          if (!response.ok) throw new Error(`Raidbots returned ${response.status}. The report may be private or expired.`);
+          json   = await response.text();
+          output = extract(json);
+
+        } else if (source === 'qe') {
+          const id = qeReportId(url);
+          if (!id) throw new Error('Could not parse the report ID from that Questionably Epic URL.');
+          dataUrl  = `https://questionablyepic.com/api/getUpgradeReport.php?reportID=${id}`;
+          const response = await fetch(dataUrl);
+          if (!response.ok) throw new Error(`Questionably Epic returned ${response.status}. The report may not exist.`);
+          json   = await response.text();
+          output = extractQE(json);
+        }
+
+        renderOutput(output);
       } catch (e) {
         if (e instanceof TypeError) {
-          // Likely a CORS/network error
           showError('Could not fetch the report directly (network or CORS error). Use the manual paste option below instead.');
           manualFallback.open = true;
         } else {
@@ -944,7 +1020,11 @@
     // Defer to let the browser repaint before the heavy JSON.parse
     setTimeout(() => {
       try {
-        renderOutput(extract(text));
+        // Auto-detect format from pasted JSON
+        let parsed = JSON.parse(text);
+        if (typeof parsed === 'string') parsed = JSON.parse(parsed); // QE double-encoding
+        const output = parsed.sim ? extract(text) : extractQE(text);
+        renderOutput(output);
       } catch (e) {
         showError(e.message);
       } finally {
