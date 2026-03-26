@@ -177,14 +177,14 @@ local function PopulateRow(row, result, rank, isEven)
     row.pctText:SetText(string.format("+%.2f%%", pct))
     row.pctText:SetTextColor(r, g, b)
 
-    -- Source: "Dungeon M+6" or "Raid Mythic" etc.
-    local locLabel = result.dropLoc or "?"
+    -- Source: "Pit of Saron M+6" or "The Voidspire Mythic" etc.
+    local locLabel = result.sourceName or result.dropLoc or "?"
     local diffLabel = ""
     if result.dropDifficulty then
-        if locLabel == "Dungeon" then
+        if result.dropLoc == "Dungeon" then
             diffLabel = " M+" .. result.dropDifficulty
-        elseif locLabel == "Raid" then
-            local diffNames = { [4]="Normal", [5]="Heroic", [6]="Mythic" }
+        elseif result.dropLoc == "Raid" then
+            local diffNames = { [2]="Normal", [4]="Heroic", [6]="Mythic" }
             diffLabel = " " .. (diffNames[result.dropDifficulty] or result.dropDifficulty)
         end
     end
