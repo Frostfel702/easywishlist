@@ -102,18 +102,16 @@ local function GetRow(parent)
     row:SetScript("OnEnter", function(self)
         if self.itemID then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
-            GameTooltip:SetItemByID(self.itemID)
-            -- Append QE sim data so the correct scaled ilvl is always visible
+            local ilvl = self.result and self.result.level
+            if ilvl then
+                GameTooltip:SetItemKey(self.itemID, ilvl, 0)
+            else
+                GameTooltip:SetItemByID(self.itemID)
+            end
             if self.result then
                 local r = self.result
                 local pctR, pctG, pctB = PctColor(r.percDiff or 0)
                 GameTooltip:AddLine(" ")
-                GameTooltip:AddDoubleLine(
-                    "Item Level (sim):",
-                    tostring(r.level or "?"),
-                    0.7, 0.9, 1,  -- label: light blue
-                    0.7, 0.9, 1   -- value: light blue
-                )
                 GameTooltip:AddDoubleLine(
                     "Upgrade:",
                     string.format("+%.2f%%", r.percDiff or 0),

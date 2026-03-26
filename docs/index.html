@@ -6,6 +6,8 @@
   <title>EasyWishlist — Sim Report Extractor</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script>const whTooltips = { colorLinks: false, iconizeLinks: false, renameLinks: false };</script>
+  <script src="https://wow.zamimg.com/js/tooltips.js"></script>
   <style>
     /* ── Variables ──────────────────────────────────────────────────────── */
     :root {
@@ -933,10 +935,11 @@
       const source = r.dropLoc === 'Dungeon'
         ? `M+${r.dropDifficulty}`
         : (diffLabels[r.dropDifficulty] || `Diff ${r.dropDifficulty}`);
+      const ilvlParam = r.ilvl ? `&ilvl=${r.ilvl}` : '';
       return `
         <tr>
           <td class="td-rank">${i + 1}</td>
-          <td class="td-item">${r.itemID}</td>
+          <td class="td-item"><a href="https://www.wowhead.com/item=${r.itemID}" data-wowhead="item=${r.itemID}${ilvlParam}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;">${r.itemID}</a></td>
           <td>${r.slot ? `<span class="slot-chip">${esc(r.slot)}</span>` : '<span style="color:var(--text-muted)">—</span>'}</td>
           <td>${r.ilvl || '—'}</td>
           <td class="td-source">${esc(r.dropLoc)} ${esc(source)}</td>
@@ -945,6 +948,7 @@
     }).join('');
 
     outputPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (typeof WH !== 'undefined' && WH.tooltips) WH.tooltips.refreshLinks();
   }
 
   // ── UI wiring ────────────────────────────────────────────────────────────
