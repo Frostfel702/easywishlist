@@ -407,36 +407,10 @@ local function ShowEmptyState(contentFrame, show)
 
             if step.url then
                 local copyBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
-                copyBtn:SetSize(80, 22)
+                copyBtn:SetSize(100, 22)
                 copyBtn:SetPoint("TOPLEFT", f, "TOPLEFT", 10, yOffset)
                 copyBtn:SetText("Copy Link")
-
-                local urlBox = CreateFrame("EditBox", nil, f)
-                urlBox:SetPoint("TOPLEFT", copyBtn, "TOPRIGHT", 6, -1)
-                urlBox:SetWidth(350)
-                urlBox:SetHeight(20)
-                urlBox:SetFont(STANDARD_TEXT_FONT, 12)
-                urlBox:SetTextColor(0.2, 0.6, 1)
-                urlBox:SetText(step.url)
-                urlBox:SetAutoFocus(false)
-                urlBox:EnableMouse(true)
-                urlBox:EnableKeyboard(true)
-                urlBox:SetScript("OnEditFocusGained", function(self) self:SelectAll() end)
-                urlBox:SetScript("OnMouseUp", function(self) self:SetFocus(); self:SelectAll() end)
-                urlBox:SetScript("OnChar", function(self) self:SetText(step.url); self:SelectAll() end)
-                urlBox:SetScript("OnKeyDown", function(self, key)
-                    if key == "ESCAPE" then self:ClearFocus() end
-                end)
-
-                copyBtn:SetScript("OnClick", function()
-                    C_Timer.After(0, function()
-                        urlBox:SetFocus()
-                        urlBox:SelectAll()
-                    end)
-                    copyBtn:SetText("Ctrl+C!")
-                    C_Timer.After(2, function() copyBtn:SetText("Copy Link") end)
-                end)
-
+                copyBtn:SetScript("OnClick", function() EWL.OpenUrlDialog() end)
                 yOffset = yOffset - 30
             end
         end
@@ -486,6 +460,65 @@ local function RefreshList(scrollChild)
 end
 
 -- ─── Header info ─────────────────────────────────────────────────────────
+
+-- ─── URL copy dialog ─────────────────────────────────────────────────────
+
+local urlDialog
+
+local function CreateUrlDialog()
+    local dialog = CreateFrame("Frame", "EWLUrlDialog", UIParent, "BackdropTemplate")
+    dialog:SetSize(480, 140)
+    dialog:SetPoint("CENTER")
+    dialog:SetFrameStrata("DIALOG")
+    dialog:SetMovable(true)
+    dialog:EnableMouse(true)
+    dialog:RegisterForDrag("LeftButton")
+    dialog:SetScript("OnDragStart", dialog.StartMoving)
+    dialog:SetScript("OnDragStop", dialog.StopMovingOrSizing)
+    dialog:SetBackdrop({
+        bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        tile = true, tileSize = 32, edgeSize = 32,
+        insets = { left = 11, right = 12, top = 12, bottom = 11 },
+    })
+
+    local title = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+    title:SetPoint("TOP", 0, -16)
+    title:SetText("EasyWishlist — Web App")
+
+    local instructions = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    instructions:SetPoint("TOP", 0, -44)
+    instructions:SetText("Select the link below and press Ctrl+C to copy:")
+    instructions:SetTextColor(0.8, 0.8, 0.8)
+
+    local editBox = CreateFrame("EditBox", nil, dialog, "InputBoxTemplate")
+    editBox:SetPoint("TOPLEFT", 20, -68)
+    editBox:SetPoint("TOPRIGHT", -20, -68)
+    editBox:SetHeight(24)
+    editBox:SetAutoFocus(true)
+    editBox:SetText("https://frostfel702.github.io/easywishlist_app/")
+    editBox:SetScript("OnShow", function(self) self:SetFocus(); self:SelectAll() end)
+    editBox:SetScript("OnEscapePressed", function() dialog:Hide() end)
+
+    local closeBtn = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate")
+    closeBtn:SetSize(100, 24)
+    closeBtn:SetPoint("BOTTOM", 0, 14)
+    closeBtn:SetText("Close")
+    closeBtn:SetScript("OnClick", function() dialog:Hide() end)
+
+    tinsert(UISpecialFrames, "EWLUrlDialog")
+    dialog:Hide()
+    return dialog
+end
+
+function EWL.OpenUrlDialog()
+    if not urlDialog then
+        urlDialog = CreateUrlDialog()
+    end
+    urlDialog:Show()
+end
+
+-- ─────────────────────────────────────────────────────────────────────────────
 
 local function UpdateHeader(infoLabel)
     local report = EWL.GetCurrentReport()
