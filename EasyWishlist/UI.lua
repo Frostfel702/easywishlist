@@ -368,14 +368,12 @@ local function ShowEmptyState(contentFrame, show)
         subtitle:SetTextColor(0.7, 0.7, 0.7)
 
         local steps = {
-            { num = "1", label = "Run a sim on Questionably Epic",
-              desc = "Visit questionablyepic.com, load your character and run an upgrade finder or BiS sim." },
-            { num = "2", label = "Export the results as JSON",
-              desc = "In the QE results page click |cffffd700Export|r or |cffffd700WoW Addon Export|r to copy the JSON." },
-            { num = "3", label = "Open the Import dialog",
+            { num = "1", label = "Run your sim",
+              desc = "|cffffd700Raidbots:|r Run a Droptimizer sim and copy the report URL.\n|cffffd700Questionably Epic:|r Run the Upgrade Finder and copy the report URL." },
+            { num = "2", label = "Open the Import dialog",
               desc = "Click the |cffffd700Import|r button (top-right) or right-click the minimap button." },
-            { num = "4", label = "Paste and confirm",
-              desc = "Paste the JSON into the text box and click |cffffd700Import|r to load your wishlist." },
+            { num = "3", label = "Paste and confirm",
+              desc = "Paste the report URL into the text box and click |cffffd700Import|r to load your wishlist." },
         }
 
         local prevAnchor = subtitle

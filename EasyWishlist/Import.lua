@@ -71,7 +71,7 @@ local function CreateImportDialog()
     importBtn:SetScript("OnClick", function()
         local text = editBox:GetText()
         if not text or text:match("^%s*$") then
-            errorLabel:SetText("Please paste a QE JSON report first.")
+            errorLabel:SetText("Please paste an import string first.")
             return
         end
 
