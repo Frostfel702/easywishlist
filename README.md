@@ -30,7 +30,7 @@ Instead of alt-tabbing to a website to check what items to target, EasyWishlist 
 Raidbots reports are too large to paste directly into WoW, so use the companion web tool first:
 
 1. Run a **Droptimizer** on [raidbots.com](https://www.raidbots.com/simbot/droptimizer)
-2. Open the **[EasyWishlist Extractor](https://alvadin.github.io/easywishlist/)** in your browser
+2. Open the **[EasyWishlist Extractor](https://frostfel702.github.io/easywishlist_app/)** in your browser
 3. Paste your Raidbots report URL → click **Extract** → copy the compact output
 4. In WoW, click the minimap button or type `/ewl` → click **Import** → paste the output
 
