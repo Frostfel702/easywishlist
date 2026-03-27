@@ -20,27 +20,26 @@ local function CreateMinimapButton()
     btn:SetFrameLevel(8)
     btn:SetFrameStrata("MEDIUM")
 
-    -- Circle mask so it looks like a proper minimap button
-    local mask = btn:CreateMaskTexture()
-    mask:SetAllPoints()
-    mask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
+    -- Background fill
+    local bg = btn:CreateTexture(nil, "BACKGROUND")
+    bg:SetSize(20, 20)
+    bg:SetTexture("Interface\\Minimap\\UI-Minimap-Background")
+    bg:SetPoint("TOPLEFT", 7, -5)
 
-    -- Icon texture (slightly inset so it sits inside the circular border)
-    local icon = btn:CreateTexture(nil, "BACKGROUND")
-    icon:SetSize(ICON_SIZE, ICON_SIZE)
-    icon:SetAllPoints()
+    -- Icon texture (LibDBIcon standard: 17x17 offset by 7,-6)
+    local icon = btn:CreateTexture(nil, "ARTWORK")
+    icon:SetSize(17, 17)
+    icon:SetPoint("TOPLEFT", 7, -6)
     icon:SetTexture("Interface\\Icons\\INV_Misc_Bag_07")
-    icon:AddMaskTexture(mask)
 
-    -- Pushed texture
-    local pushed = btn:CreateTexture(nil, "HIGHLIGHT")
-    pushed:SetAllPoints()
-    pushed:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+    -- Highlight
+    btn:SetHighlightTexture("Interface\\Minimap\\UI-Minimap-ZoomButton-Highlight")
 
-    -- Border
+    -- Border ring (53x53 anchored at TOPLEFT — this is intentional per LibDBIcon)
     local border = btn:CreateTexture(nil, "OVERLAY")
-    border:SetAllPoints()
+    border:SetSize(53, 53)
     border:SetTexture("Interface\\Minimap\\MiniMap-TrackingBorder")
+    border:SetPoint("TOPLEFT")
 
     -- Dragging to reposition
     local isDragging = false
