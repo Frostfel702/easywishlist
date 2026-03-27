@@ -27,9 +27,9 @@ local function CreateMinimapButton()
 
     -- Icon texture (slightly inset so it sits inside the circular border)
     local icon = btn:CreateTexture(nil, "BACKGROUND")
-    icon:SetSize(ICON_SIZE - 4, ICON_SIZE - 4)
-    icon:SetPoint("CENTER", 0, 0)
-    icon:SetTexture("Interface\\Icons\\Achievement_GuildPerk_EverybodysFriend")
+    icon:SetSize(ICON_SIZE, ICON_SIZE)
+    icon:SetAllPoints()
+    icon:SetTexture("Interface\\Icons\\INV_Misc_Bag_07")
     icon:AddMaskTexture(mask)
 
     -- Pushed texture
