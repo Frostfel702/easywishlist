@@ -350,15 +350,66 @@ end
 -- ─── Empty state ─────────────────────────────────────────────────────────
 
 local function ShowEmptyState(contentFrame, show)
-    if not contentFrame.emptyLabel then
-        local lbl = contentFrame:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-        lbl:SetPoint("CENTER", 0, 0)
-        lbl:SetText("No report loaded.\nClick |cffffd700Import|r or right-click the minimap button.")
-        lbl:SetJustifyH("CENTER")
-        lbl:SetTextColor(0.6, 0.6, 0.6)
-        contentFrame.emptyLabel = lbl
+    if not contentFrame.tutorialFrame then
+        local f = CreateFrame("Frame", nil, contentFrame)
+        f:SetPoint("TOPLEFT", 20, -10)
+        f:SetPoint("BOTTOMRIGHT", -20, 10)
+        contentFrame.tutorialFrame = f
+
+        local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+        title:SetPoint("TOP", 0, -10)
+        title:SetText("|cff00ff96Getting Started|r")
+        title:SetJustifyH("CENTER")
+
+        local subtitle = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        subtitle:SetPoint("TOP", title, "BOTTOM", 0, -6)
+        subtitle:SetText("Follow these steps to import your first sim report")
+        subtitle:SetJustifyH("CENTER")
+        subtitle:SetTextColor(0.7, 0.7, 0.7)
+
+        local steps = {
+            { num = "1", color = "ffd700", label = "Run a sim on Questionably Epic",
+              desc = "Go to questionablyepic.com, load your character and run\nan upgrade finder or BiS simulation." },
+            { num = "2", color = "ffd700", label = "Export the results as JSON",
+              desc = "In the QE results page, click the |cffffd700\"Export\"|r or\n|cffffd700\"WoW Addon Export\"|r button to copy the JSON data." },
+            { num = "3", color = "ffd700", label = "Open the Import dialog",
+              desc = "Click the |cffffd700Import|r button (top-right) or right-click\nthe minimap button and select Import." },
+            { num = "4", color = "ffd700", label = "Paste and confirm",
+              desc = "Paste the copied JSON into the text box and click\n|cffffd700Import|r to load your wishlist." },
+        }
+
+        local prevAnchor = subtitle
+        for _, step in ipairs(steps) do
+            local row = CreateFrame("Frame", nil, f)
+            row:SetHeight(52)
+            row:SetPoint("TOPLEFT", 30, prevAnchor == subtitle and -22 or 0)
+            row:SetPoint("TOPRIGHT", -30, prevAnchor == subtitle and -22 or 0)
+            if prevAnchor ~= subtitle then
+                row:SetPoint("TOP", prevAnchor, "BOTTOM", 0, -8)
+            end
+
+            local circle = row:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
+            circle:SetPoint("TOPLEFT", 0, 0)
+            circle:SetText("|cff" .. step.color .. "[" .. step.num .. "]|r")
+
+            local stepLabel = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            stepLabel:SetPoint("TOPLEFT", circle, "TOPRIGHT", 8, 0)
+            stepLabel:SetPoint("TOPRIGHT", 0, 0)
+            stepLabel:SetText(step.label)
+            stepLabel:SetJustifyH("LEFT")
+            stepLabel:SetTextColor(1, 1, 1)
+
+            local stepDesc = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            stepDesc:SetPoint("TOPLEFT", stepLabel, "BOTTOMLEFT", 0, -2)
+            stepDesc:SetPoint("TOPRIGHT", 0, 0)
+            stepDesc:SetText(step.desc)
+            stepDesc:SetJustifyH("LEFT")
+            stepDesc:SetTextColor(0.7, 0.7, 0.7)
+
+            prevAnchor = row
+        end
     end
-    contentFrame.emptyLabel:SetShown(show)
+    contentFrame.tutorialFrame:SetShown(show)
 end
 
 -- ─── Refresh list ────────────────────────────────────────────────────────
