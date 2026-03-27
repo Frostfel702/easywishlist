@@ -25,10 +25,11 @@ local function CreateMinimapButton()
     mask:SetAllPoints()
     mask:SetTexture("Interface\\CharacterFrame\\TempPortraitAlphaMask", "CLAMPTOBLACKADDITIVE", "CLAMPTOBLACKADDITIVE")
 
-    -- Icon texture
+    -- Icon texture (slightly inset so it sits inside the circular border)
     local icon = btn:CreateTexture(nil, "BACKGROUND")
-    icon:SetAllPoints()
-    icon:SetTexture("Interface\\Icons\\INV_Misc_Bag_10_Green")
+    icon:SetSize(ICON_SIZE - 4, ICON_SIZE - 4)
+    icon:SetPoint("CENTER", 0, 0)
+    icon:SetTexture("Interface\\Icons\\Achievement_GuildPerk_EverybodysFriend")
     icon:AddMaskTexture(mask)
 
     -- Pushed texture
