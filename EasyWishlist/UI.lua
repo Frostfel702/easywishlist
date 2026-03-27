@@ -351,9 +351,13 @@ end
 
 local function ShowEmptyState(contentFrame, show)
     if not contentFrame.tutorialFrame then
-        local f = CreateFrame("Frame", nil, contentFrame)
-        f:SetPoint("TOPLEFT", 20, -10)
-        f:SetPoint("BOTTOMRIGHT", -20, 10)
+        -- Parent to the main window (scrollChild → scrollFrame → win) so
+        -- interactive elements (buttons, editboxes) receive mouse events correctly.
+        local win = contentFrame:GetParent():GetParent()
+        local f = CreateFrame("Frame", nil, win)
+        f:SetPoint("TOPLEFT", win, "TOPLEFT", 14, -108)
+        f:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -30, 14)
+        f:SetFrameStrata("MEDIUM")
         contentFrame.tutorialFrame = f
 
         local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
