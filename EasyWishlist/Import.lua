@@ -29,7 +29,7 @@ local function CreateImportDialog()
     -- Instructions
     local instructions = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     instructions:SetPoint("TOP", 0, -44)
-    instructions:SetText("Paste your Questionably Epic JSON export below:")
+    instructions:SetText("Paste your EasyWishlist import string below:")
     instructions:SetTextColor(0.8, 0.8, 0.8)
 
     -- EditBox scroll frame

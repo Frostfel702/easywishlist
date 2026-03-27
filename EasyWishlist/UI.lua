@@ -357,7 +357,7 @@ local function ShowEmptyState(contentFrame, show)
         contentFrame.tutorialFrame = f
 
         local title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-        title:SetPoint("TOP", 0, -10)
+        title:SetPoint("TOP", f, "TOP", 0, -14)
         title:SetText("|cff00ff96Getting Started|r")
         title:SetJustifyH("CENTER")
 
@@ -368,45 +368,37 @@ local function ShowEmptyState(contentFrame, show)
         subtitle:SetTextColor(0.7, 0.7, 0.7)
 
         local steps = {
-            { num = "1", color = "ffd700", label = "Run a sim on Questionably Epic",
-              desc = "Go to questionablyepic.com, load your character and run\nan upgrade finder or BiS simulation." },
-            { num = "2", color = "ffd700", label = "Export the results as JSON",
-              desc = "In the QE results page, click the |cffffd700\"Export\"|r or\n|cffffd700\"WoW Addon Export\"|r button to copy the JSON data." },
-            { num = "3", color = "ffd700", label = "Open the Import dialog",
-              desc = "Click the |cffffd700Import|r button (top-right) or right-click\nthe minimap button and select Import." },
-            { num = "4", color = "ffd700", label = "Paste and confirm",
-              desc = "Paste the copied JSON into the text box and click\n|cffffd700Import|r to load your wishlist." },
+            { num = "1", label = "Run a sim on Questionably Epic",
+              desc = "Visit questionablyepic.com, load your character and run an upgrade finder or BiS sim." },
+            { num = "2", label = "Export the results as JSON",
+              desc = "In the QE results page click |cffffd700Export|r or |cffffd700WoW Addon Export|r to copy the JSON." },
+            { num = "3", label = "Open the Import dialog",
+              desc = "Click the |cffffd700Import|r button (top-right) or right-click the minimap button." },
+            { num = "4", label = "Paste and confirm",
+              desc = "Paste the JSON into the text box and click |cffffd700Import|r to load your wishlist." },
         }
 
         local prevAnchor = subtitle
         for _, step in ipairs(steps) do
-            local row = CreateFrame("Frame", nil, f)
-            row:SetHeight(52)
-            row:SetPoint("TOPLEFT", 30, prevAnchor == subtitle and -22 or 0)
-            row:SetPoint("TOPRIGHT", -30, prevAnchor == subtitle and -22 or 0)
-            if prevAnchor ~= subtitle then
-                row:SetPoint("TOP", prevAnchor, "BOTTOM", 0, -8)
-            end
+            local numStr = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            numStr:SetPoint("TOPLEFT", prevAnchor, "BOTTOMLEFT", prevAnchor == subtitle and 30 or 0, prevAnchor == subtitle and -20 or -12)
+            numStr:SetText("|cffffd700[" .. step.num .. "]|r")
 
-            local circle = row:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-            circle:SetPoint("TOPLEFT", 0, 0)
-            circle:SetText("|cff" .. step.color .. "[" .. step.num .. "]|r")
+            local labelStr = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+            labelStr:SetPoint("TOPLEFT", numStr, "TOPRIGHT", 6, 0)
+            labelStr:SetWidth(380)
+            labelStr:SetText(step.label)
+            labelStr:SetJustifyH("LEFT")
+            labelStr:SetTextColor(1, 1, 1)
 
-            local stepLabel = row:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-            stepLabel:SetPoint("TOPLEFT", circle, "TOPRIGHT", 8, 0)
-            stepLabel:SetPoint("TOPRIGHT", 0, 0)
-            stepLabel:SetText(step.label)
-            stepLabel:SetJustifyH("LEFT")
-            stepLabel:SetTextColor(1, 1, 1)
+            local descStr = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            descStr:SetPoint("TOPLEFT", numStr, "BOTTOMLEFT", 0, -2)
+            descStr:SetWidth(380)
+            descStr:SetText(step.desc)
+            descStr:SetJustifyH("LEFT")
+            descStr:SetTextColor(0.7, 0.7, 0.7)
 
-            local stepDesc = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-            stepDesc:SetPoint("TOPLEFT", stepLabel, "BOTTOMLEFT", 0, -2)
-            stepDesc:SetPoint("TOPRIGHT", 0, 0)
-            stepDesc:SetText(step.desc)
-            stepDesc:SetJustifyH("LEFT")
-            stepDesc:SetTextColor(0.7, 0.7, 0.7)
-
-            prevAnchor = row
+            prevAnchor = descStr
         end
     end
     contentFrame.tutorialFrame:SetShown(show)
