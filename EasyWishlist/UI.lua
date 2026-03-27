@@ -440,17 +440,17 @@ local function CreateMainWindow()
     title:SetPoint("TOPLEFT", 16, -14)
     title:SetText("|cff00ff96Easy|rWishlist")
 
+    -- Close button
+    local closeBtn = CreateFrame("Button", nil, win, "UIPanelCloseButton")
+    closeBtn:SetPoint("TOPRIGHT", 4, 4)
+    closeBtn:SetScript("OnClick", function() win:Hide() end)
+
     -- Import button
     local importBtn = CreateFrame("Button", nil, win, "UIPanelButtonTemplate")
     importBtn:SetSize(80, 22)
-    importBtn:SetPoint("TOPRIGHT", -16, -12)
+    importBtn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", -4, -4)
     importBtn:SetText("Import")
     importBtn:SetScript("OnClick", EWL.OpenImportDialog)
-
-    -- Close button
-    local closeBtn = CreateFrame("Button", nil, win, "UIPanelCloseButton")
-    closeBtn:SetPoint("TOPRIGHT", importBtn, "TOPLEFT", -4, 4)
-    closeBtn:SetScript("OnClick", function() win:Hide() end)
 
     -- Sim info line
     local infoLabel = win:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
