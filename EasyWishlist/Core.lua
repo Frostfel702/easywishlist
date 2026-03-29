@@ -4,6 +4,7 @@
 EWL = {}
 
 local ADDON_NAME = "EasyWishlist"
+local MAX_REPORTS = 20
 
 -- ─── SavedVariables Init ───────────────────────────────────────────────────
 
@@ -29,14 +30,72 @@ function EWL.GetCharacterKey()
     return name .. "-" .. realm
 end
 
+-- ─── Migration ────────────────────────────────────────────────────────────
+
+-- Migrates a character's data from the old single-report format to the new
+-- multi-report wrapper format. Safe to call multiple times.
+local function MigrateIfNeeded(key)
+    local data = EasyWishlistDB.reports[key]
+    if not data then return end
+    -- Old format has .results directly on the top-level table
+    if data.results then
+        data.title = data.spec or "Imported Report"
+        EasyWishlistDB.reports[key] = {
+            activeIndex = 1,
+            list = { data },
+        }
+    end
+end
+
 -- ─── Data Access ──────────────────────────────────────────────────────────
 
 function EWL.GetCurrentReport()
     local key = EWL.GetCharacterKey()
-    return EasyWishlistDB.reports[key]
+    MigrateIfNeeded(key)
+    local wrapper = EasyWishlistDB.reports[key]
+    if not wrapper then return nil end
+    return wrapper.list[wrapper.activeIndex]
 end
 
-function EWL.SaveReport(data)
+function EWL.GetReportList()
+    local key = EWL.GetCharacterKey()
+    MigrateIfNeeded(key)
+    local wrapper = EasyWishlistDB.reports[key]
+    if not wrapper then return {}, 0 end
+    local out = {}
+    for i, r in ipairs(wrapper.list) do
+        out[i] = {
+            title       = r.title or ("Report " .. i),
+            spec        = r.spec,
+            contentType = r.contentType,
+            dateCreated = r.dateCreated,
+        }
+    end
+    return out, wrapper.activeIndex
+end
+
+function EWL.SetActiveReport(index)
+    local key = EWL.GetCharacterKey()
+    MigrateIfNeeded(key)
+    local wrapper = EasyWishlistDB.reports[key]
+    if not wrapper then return end
+    local total = #wrapper.list
+    if total == 0 then return end
+    wrapper.activeIndex = math.max(1, math.min(index, total))
+end
+
+function EWL.DeleteReport(index)
+    local key = EWL.GetCharacterKey()
+    MigrateIfNeeded(key)
+    local wrapper = EasyWishlistDB.reports[key]
+    if not wrapper then return end
+    if #wrapper.list <= 1 then return end -- must keep at least one
+    table.remove(wrapper.list, index)
+    -- Clamp activeIndex so it stays valid
+    wrapper.activeIndex = math.max(1, math.min(wrapper.activeIndex, #wrapper.list))
+end
+
+function EWL.SaveReport(data, title)
     -- Validate required fields
     if not data.results or type(data.results) ~= "table" then
         return false, "Missing or invalid 'results' field"
@@ -66,8 +125,13 @@ function EWL.SaveReport(data)
         return (a.percDiff or 0) > (b.percDiff or 0)
     end)
 
-    local key = EWL.GetCharacterKey()
-    EasyWishlistDB.reports[key] = {
+    if not title or title:match("^%s*$") then
+        local ct = data.contentType or ""
+        title = (data.spec or "Report") .. (ct ~= "" and (" - " .. ct) or "")
+    end
+
+    local entry = {
+        title       = title,
         id          = data.id,
         dateCreated = data.dateCreated,
         playername  = data.playername,
@@ -78,6 +142,22 @@ function EWL.SaveReport(data)
         gameType    = data.gameType,
         results     = results,
     }
+
+    local key = EWL.GetCharacterKey()
+    MigrateIfNeeded(key)
+    local wrapper = EasyWishlistDB.reports[key]
+    if not wrapper then
+        wrapper = { activeIndex = 1, list = {} }
+        EasyWishlistDB.reports[key] = wrapper
+    end
+
+    -- Cap at MAX_REPORTS: drop the oldest entry if full
+    if #wrapper.list >= MAX_REPORTS then
+        table.remove(wrapper.list, 1)
+    end
+
+    wrapper.list[#wrapper.list + 1] = entry
+    wrapper.activeIndex = #wrapper.list
 
     return true
 end

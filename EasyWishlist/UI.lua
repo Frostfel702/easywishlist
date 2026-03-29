@@ -2,7 +2,7 @@
 -- Main window: header, scrolling item list, tooltips
 
 local WINDOW_W  = 540
-local WINDOW_H  = 440   -- slightly taller to fit group buttons
+local WINDOW_H  = 464   -- extra height for report nav bar
 local ROW_H     = 32
 local HEADER_H  = 22
 local ICON_SIZE = 24
@@ -355,7 +355,7 @@ local function ShowEmptyState(contentFrame, show)
         -- interactive elements (buttons, editboxes) receive mouse events correctly.
         local win = contentFrame:GetParent():GetParent()
         local f = CreateFrame("Frame", nil, win)
-        f:SetPoint("TOPLEFT", win, "TOPLEFT", 14, -108)
+        f:SetPoint("TOPLEFT", win, "TOPLEFT", 14, -132)
         f:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -30, 14)
         f:SetFrameStrata("MEDIUM")
         contentFrame.tutorialFrame = f
@@ -520,15 +520,39 @@ end
 
 -- ─────────────────────────────────────────────────────────────────────────────
 
-local function UpdateHeader(infoLabel)
+local function UpdateNavBar(win)
+    if not win.navBar then return end
+    local list, activeIdx = EWL.GetReportList()
+    local total = #list
+    local nb = win.navBar
+
+    if total <= 1 then
+        nb:Hide()
+        return
+    end
+
+    nb:Show()
+    local current = list[activeIdx]
+    nb.label:SetText(string.format("%s  |cff888888(%d/%d)|r",
+        current and current.title or "?", activeIdx, total))
+    nb.prevBtn:SetEnabled(activeIdx > 1)
+    nb.nextBtn:SetEnabled(activeIdx < total)
+    -- Hide delete button if only 1 report remains (redundant but safe)
+    nb.delBtn:SetShown(total > 1)
+end
+
+local function UpdateHeader(win)
+    local infoLabel = win.infoLabel
     local report = EWL.GetCurrentReport()
-    if not report then infoLabel:SetText(""); return end
-    local diffLabel = EWL.GetDifficultyLabel(report)
-    local text = string.format("|cffffd700%s|r  %s  |cff888888%s|r",
-        report.spec or "?",
-        report.contentType and (report.contentType .. (diffLabel ~= "" and (" " .. diffLabel) or "")) or "?",
-        report.dateCreated or "")
-    infoLabel:SetText(text)
+    if not report then infoLabel:SetText("") else
+        local diffLabel = EWL.GetDifficultyLabel(report)
+        local text = string.format("|cffffd700%s|r  %s  |cff888888%s|r",
+            report.spec or "?",
+            report.contentType and (report.contentType .. (diffLabel ~= "" and (" " .. diffLabel) or "")) or "?",
+            report.dateCreated or "")
+        infoLabel:SetText(text)
+    end
+    UpdateNavBar(win)
 end
 
 -- ─── Main window ─────────────────────────────────────────────────────────
@@ -568,10 +592,59 @@ local function CreateMainWindow()
     importBtn:SetText("Import")
     importBtn:SetScript("OnClick", EWL.OpenImportDialog)
 
+    -- ── Report navigation bar ─────────────────────────────────────────────
+    local navBar = CreateFrame("Frame", nil, win)
+    navBar:SetPoint("TOPLEFT", 14, -36)
+    navBar:SetPoint("TOPRIGHT", -14, -36)
+    navBar:SetHeight(20)
+    win.navBar = navBar
+
+    local prevBtn = CreateFrame("Button", nil, navBar, "UIPanelButtonTemplate")
+    prevBtn:SetSize(22, 18)
+    prevBtn:SetPoint("LEFT", 0, 0)
+    prevBtn:SetText("<")
+    prevBtn:SetScript("OnClick", function()
+        local _, idx = EWL.GetReportList()
+        EWL.SetActiveReport(idx - 1)
+        EWL.RefreshMainWindow()
+    end)
+    navBar.prevBtn = prevBtn
+
+    local nextBtn = CreateFrame("Button", nil, navBar, "UIPanelButtonTemplate")
+    nextBtn:SetSize(22, 18)
+    nextBtn:SetPoint("LEFT", prevBtn, "RIGHT", 2, 0)
+    nextBtn:SetText(">")
+    nextBtn:SetScript("OnClick", function()
+        local _, idx = EWL.GetReportList()
+        EWL.SetActiveReport(idx + 1)
+        EWL.RefreshMainWindow()
+    end)
+    navBar.nextBtn = nextBtn
+
+    local navLabel = navBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    navLabel:SetPoint("LEFT", nextBtn, "RIGHT", 6, 0)
+    navLabel:SetPoint("RIGHT", navBar, "RIGHT", -30, 0)
+    navLabel:SetJustifyH("LEFT")
+    navBar.label = navLabel
+
+    local delBtn = CreateFrame("Button", nil, navBar, "UIPanelButtonTemplate")
+    delBtn:SetSize(22, 18)
+    delBtn:SetPoint("RIGHT", navBar, "RIGHT", 0, 0)
+    delBtn:SetText("x")
+    delBtn:GetNormalFontObject():SetTextColor(1, 0.4, 0.4)
+    delBtn:SetScript("OnClick", function()
+        local _, idx = EWL.GetReportList()
+        EWL.DeleteReport(idx)
+        EWL.RefreshMainWindow()
+    end)
+    navBar.delBtn = delBtn
+
+    navBar:Hide()  -- hidden until there are 2+ reports
+
     -- Sim info line
     local infoLabel = win:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    infoLabel:SetPoint("TOPLEFT", 16, -38)
-    infoLabel:SetPoint("TOPRIGHT", -110, -38)
+    infoLabel:SetPoint("TOPLEFT", 16, -60)
+    infoLabel:SetPoint("TOPRIGHT", -110, -60)
     infoLabel:SetJustifyH("LEFT")
     win.infoLabel = infoLabel
 
@@ -579,14 +652,14 @@ local function CreateMainWindow()
     local groupBtns = {}
 
     local groupLabel = win:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    groupLabel:SetPoint("TOPLEFT", 16, -60)
+    groupLabel:SetPoint("TOPLEFT", 16, -82)
     groupLabel:SetText("Group:")
     groupLabel:SetTextColor(0.5, 0.5, 0.5)
 
     local function MakeGroupBtn(label, mode, xLeft)
         local btn = CreateFrame("Button", nil, win)
         btn:SetSize(72, 18)
-        btn:SetPoint("TOPLEFT", win, "TOPLEFT", xLeft, -58)
+        btn:SetPoint("TOPLEFT", win, "TOPLEFT", xLeft, -80)
 
         local bg = btn:CreateTexture(nil, "BACKGROUND")
         bg:SetAllPoints()
@@ -629,21 +702,21 @@ local function CreateMainWindow()
 
     -- Divider
     local divider = win:CreateTexture(nil, "ARTWORK")
-    divider:SetPoint("TOPLEFT", 14, -80)
-    divider:SetPoint("TOPRIGHT", -14, -80)
+    divider:SetPoint("TOPLEFT", 14, -104)
+    divider:SetPoint("TOPRIGHT", -14, -104)
     divider:SetHeight(1)
     divider:SetColorTexture(0.4, 0.4, 0.4, 0.6)
 
     -- Column headers
     local headerFrame = CreateFrame("Frame", nil, win)
-    headerFrame:SetPoint("TOPLEFT", 14, -84)
-    headerFrame:SetPoint("TOPRIGHT", -14, -84)
+    headerFrame:SetPoint("TOPLEFT", 14, -108)
+    headerFrame:SetPoint("TOPRIGHT", -14, -108)
     headerFrame:SetHeight(20)
     CreateHeaders(headerFrame)
 
     -- Scroll frame
     local scrollFrame = CreateFrame("ScrollFrame", nil, win, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", 14, -108)
+    scrollFrame:SetPoint("TOPLEFT", 14, -132)
     scrollFrame:SetPoint("BOTTOMRIGHT", -30, 14)
 
     local scrollChild = CreateFrame("Frame", nil, scrollFrame)
@@ -657,7 +730,7 @@ local function CreateMainWindow()
     tinsert(UISpecialFrames, "EWLMainWindow")
 
     win:SetScript("OnShow", function()
-        UpdateHeader(win.infoLabel)
+        UpdateHeader(win)
         RefreshList(scrollChild)
     end)
 
@@ -678,7 +751,7 @@ end
 
 function EWL.RefreshMainWindow()
     if mainWindow and mainWindow:IsShown() then
-        if mainWindow.infoLabel then UpdateHeader(mainWindow.infoLabel) end
+        UpdateHeader(mainWindow)
         if mainWindow.scrollChild then RefreshList(mainWindow.scrollChild) end
     end
 end
