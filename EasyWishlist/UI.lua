@@ -518,41 +518,121 @@ function EWL.OpenUrlDialog()
     urlDialog:Show()
 end
 
--- ─────────────────────────────────────────────────────────────────────────────
+-- ─── Spec selector helpers ────────────────────────────────────────────────
 
-local function UpdateNavBar(win)
-    if not win.navBar then return end
-    local list, activeIdx = EWL.GetReportList()
-    local total = #list
-    local nb = win.navBar
+local specPopup
+
+local function ShortSpecName(fullSpec)
+    return (fullSpec:match("^(%S+)") or fullSpec)
+end
+
+local function CloseSpecPopup()
+    if specPopup then specPopup:Hide() end
+end
+
+local function OpenSpecPopup(anchor)
+    local specs, activeSpec = EWL.GetSpecList()
+
+    if not specPopup then
+        specPopup = CreateFrame("Frame", "EWLSpecPopup", UIParent, "BackdropTemplate")
+        specPopup:SetFrameStrata("TOOLTIP")
+        specPopup:SetBackdrop({
+            bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
+            edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+            tile = true, tileSize = 32, edgeSize = 16,
+            insets = { left = 4, right = 4, top = 4, bottom = 4 },
+        })
+        specPopup.rows = {}
+    end
+
+    -- Hide/recycle existing rows
+    for _, r in ipairs(specPopup.rows) do r:Hide() end
+    wipe(specPopup.rows)
+
+    local ROW_H = 22
+    local PAD   = 8
+    local WIDTH = 130
+    local yOff  = -PAD
+
+    for _, spec in ipairs(specs) do
+        local row = CreateFrame("Button", nil, specPopup)
+        row:SetHeight(ROW_H)
+        row:SetPoint("TOPLEFT",  PAD, yOff)
+        row:SetPoint("TOPRIGHT", -PAD, yOff)
+
+        local hl = row:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints()
+        hl:SetColorTexture(1, 1, 1, 0.08)
+
+        local dot = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        dot:SetPoint("LEFT", 0, 0)
+        dot:SetWidth(14)
+        dot:SetJustifyH("CENTER")
+
+        local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        lbl:SetPoint("LEFT", 14, 0)
+        lbl:SetJustifyH("LEFT")
+        lbl:SetText(ShortSpecName(spec))
+
+        if spec == activeSpec then
+            dot:SetText("|cff00ff96●|r")
+            lbl:SetTextColor(1, 1, 1)
+        else
+            dot:SetText("")
+            lbl:SetTextColor(0.7, 0.7, 0.7)
+        end
+
+        local capturedSpec = spec
+        row:SetScript("OnClick", function()
+            EWL.SetActiveSpec(capturedSpec)
+            CloseSpecPopup()
+            EWL.RefreshMainWindow()
+        end)
+
+        row:Show()
+        specPopup.rows[#specPopup.rows + 1] = row
+        yOff = yOff - ROW_H
+    end
+
+    local totalH = PAD * 2 + #specs * ROW_H
+    specPopup:SetSize(WIDTH, totalH)
+    specPopup:ClearAllPoints()
+    specPopup:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
+    specPopup:Show()
+end
+
+-- ─── Header / spec selector update ───────────────────────────────────────
+
+local function UpdateSpecSelector(win)
+    if not win.specSelector then return end
+    local specs, activeSpec = EWL.GetSpecList()
+    local total = #specs
+    local ss = win.specSelector
 
     if total <= 1 then
-        nb:Hide()
+        ss:Hide()
+        CloseSpecPopup()
         return
     end
 
-    nb:Show()
-    local current = list[activeIdx]
-    nb.label:SetText(string.format("%s  |cff888888(%d/%d)|r",
-        current and current.title or "?", activeIdx, total))
-    nb.prevBtn:SetEnabled(activeIdx > 1)
-    nb.nextBtn:SetEnabled(activeIdx < total)
-    -- Hide delete button if only 1 report remains (redundant but safe)
-    nb.delBtn:SetShown(total > 1)
+    ss:Show()
+    local shortName = activeSpec and ShortSpecName(activeSpec) or "?"
+    ss.dropBtn:SetText(shortName .. " \226\150\190")
+    ss.removeBtn:SetShown(total > 1)
 end
 
 local function UpdateHeader(win)
     local infoLabel = win.infoLabel
     local report = EWL.GetCurrentReport()
-    if not report then infoLabel:SetText("") else
-        local diffLabel = EWL.GetDifficultyLabel(report)
-        local text = string.format("|cffffd700%s|r  %s  |cff888888%s|r",
+    if not report then
+        infoLabel:SetText("")
+    else
+        local text = string.format("|cffffd700%s|r  |cff888888Last updated: %s|r",
             report.spec or "?",
-            report.contentType and (report.contentType .. (diffLabel ~= "" and (" " .. diffLabel) or "")) or "?",
-            report.dateCreated or "")
+            report.lastUpdated or "")
         infoLabel:SetText(text)
     end
-    UpdateNavBar(win)
+    UpdateSpecSelector(win)
 end
 
 -- ─── Main window ─────────────────────────────────────────────────────────
@@ -592,54 +672,41 @@ local function CreateMainWindow()
     importBtn:SetText("Import")
     importBtn:SetScript("OnClick", EWL.OpenImportDialog)
 
-    -- ── Report navigation bar ─────────────────────────────────────────────
-    local navBar = CreateFrame("Frame", nil, win)
-    navBar:SetPoint("TOPLEFT", 14, -36)
-    navBar:SetPoint("TOPRIGHT", -14, -36)
-    navBar:SetHeight(20)
-    win.navBar = navBar
+    -- ── Spec selector ─────────────────────────────────────────────────────
+    local specSelector = CreateFrame("Frame", nil, win)
+    specSelector:SetPoint("TOPLEFT", 14, -36)
+    specSelector:SetPoint("TOPRIGHT", -14, -36)
+    specSelector:SetHeight(20)
+    win.specSelector = specSelector
 
-    local prevBtn = CreateFrame("Button", nil, navBar, "UIPanelButtonTemplate")
-    prevBtn:SetSize(22, 18)
-    prevBtn:SetPoint("LEFT", 0, 0)
-    prevBtn:SetText("<")
-    prevBtn:SetScript("OnClick", function()
-        local _, idx = EWL.GetReportList()
-        EWL.SetActiveReport(idx - 1)
-        EWL.RefreshMainWindow()
+    local dropBtn = CreateFrame("Button", nil, specSelector, "UIPanelButtonTemplate")
+    dropBtn:SetSize(110, 20)
+    dropBtn:SetPoint("LEFT", 0, 0)
+    dropBtn:SetText("? \226\150\190")
+    dropBtn:SetScript("OnClick", function()
+        if specPopup and specPopup:IsShown() then
+            CloseSpecPopup()
+        else
+            OpenSpecPopup(dropBtn)
+        end
     end)
-    navBar.prevBtn = prevBtn
+    specSelector.dropBtn = dropBtn
 
-    local nextBtn = CreateFrame("Button", nil, navBar, "UIPanelButtonTemplate")
-    nextBtn:SetSize(22, 18)
-    nextBtn:SetPoint("LEFT", prevBtn, "RIGHT", 2, 0)
-    nextBtn:SetText(">")
-    nextBtn:SetScript("OnClick", function()
-        local _, idx = EWL.GetReportList()
-        EWL.SetActiveReport(idx + 1)
-        EWL.RefreshMainWindow()
+    local removeBtn = CreateFrame("Button", nil, specSelector, "UIPanelButtonTemplate")
+    removeBtn:SetSize(110, 20)
+    removeBtn:SetPoint("LEFT", dropBtn, "RIGHT", 6, 0)
+    removeBtn:SetText("Remove report")
+    removeBtn:SetScript("OnClick", function()
+        local _, activeSpec = EWL.GetSpecList()
+        if activeSpec then
+            EWL.DeleteSpec(activeSpec)
+            CloseSpecPopup()
+            EWL.RefreshMainWindow()
+        end
     end)
-    navBar.nextBtn = nextBtn
+    specSelector.removeBtn = removeBtn
 
-    local navLabel = navBar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    navLabel:SetPoint("LEFT", nextBtn, "RIGHT", 6, 0)
-    navLabel:SetPoint("RIGHT", navBar, "RIGHT", -30, 0)
-    navLabel:SetJustifyH("LEFT")
-    navBar.label = navLabel
-
-    local delBtn = CreateFrame("Button", nil, navBar, "UIPanelButtonTemplate")
-    delBtn:SetSize(22, 18)
-    delBtn:SetPoint("RIGHT", navBar, "RIGHT", 0, 0)
-    delBtn:SetText("x")
-    delBtn:GetNormalFontObject():SetTextColor(1, 0.4, 0.4)
-    delBtn:SetScript("OnClick", function()
-        local _, idx = EWL.GetReportList()
-        EWL.DeleteReport(idx)
-        EWL.RefreshMainWindow()
-    end)
-    navBar.delBtn = delBtn
-
-    navBar:Hide()  -- hidden until there are 2+ reports
+    specSelector:Hide()  -- hidden until there are 2+ specs
 
     -- Sim info line
     local infoLabel = win:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
@@ -732,6 +799,10 @@ local function CreateMainWindow()
     win:SetScript("OnShow", function()
         UpdateHeader(win)
         RefreshList(scrollChild)
+    end)
+
+    win:SetScript("OnHide", function()
+        CloseSpecPopup()
     end)
 
     win:Hide()

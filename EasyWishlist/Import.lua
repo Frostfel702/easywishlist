@@ -3,22 +3,9 @@
 
 local importDialog
 
--- Build an auto-suggested title from parsed report data
-local function SuggestTitle(data)
-    if not data then return "" end
-    local spec = data.spec or ""
-    local ct   = data.contentType or ""
-    if spec ~= "" and ct ~= "" then
-        return spec .. " - " .. ct
-    elseif spec ~= "" then
-        return spec
-    end
-    return "Imported Report"
-end
-
 local function CreateImportDialog()
     local dialog = CreateFrame("Frame", "EWLImportDialog", UIParent, "BackdropTemplate")
-    dialog:SetSize(520, 420)
+    dialog:SetSize(520, 380)
     dialog:SetPoint("CENTER")
     dialog:SetFrameStrata("DIALOG")
     dialog:SetMovable(true)
@@ -39,30 +26,15 @@ local function CreateImportDialog()
     title:SetPoint("TOP", 0, -16)
     title:SetText("EasyWishlist — Import Report")
 
-    -- Report name label
-    local nameLabel = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    nameLabel:SetPoint("TOPLEFT", 20, -48)
-    nameLabel:SetText("Report name:")
-    nameLabel:SetTextColor(0.8, 0.8, 0.8)
-
-    -- Report name input
-    local nameBox = CreateFrame("EditBox", nil, dialog, "InputBoxTemplate")
-    nameBox:SetPoint("TOPLEFT", 100, -44)
-    nameBox:SetPoint("TOPRIGHT", -20, -44)
-    nameBox:SetHeight(20)
-    nameBox:SetAutoFocus(false)
-    nameBox:SetScript("OnEscapePressed", function() dialog:Hide() end)
-    dialog.nameBox = nameBox
-
     -- Instructions
     local instructions = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    instructions:SetPoint("TOP", 0, -76)
+    instructions:SetPoint("TOP", 0, -44)
     instructions:SetText("Paste your EasyWishlist import string below:")
     instructions:SetTextColor(0.8, 0.8, 0.8)
 
     -- EditBox scroll frame
     local scrollFrame = CreateFrame("ScrollFrame", nil, dialog, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", 20, -100)
+    scrollFrame:SetPoint("TOPLEFT", 20, -70)
     scrollFrame:SetPoint("BOTTOMRIGHT", -36, 60)
 
     local editBox = CreateFrame("EditBox", nil, scrollFrame)
@@ -72,20 +44,7 @@ local function CreateImportDialog()
     editBox:SetWidth(scrollFrame:GetWidth())
     editBox:SetScript("OnEscapePressed", function() dialog:Hide() end)
     editBox:SetScript("OnTextChanged", function(self)
-        -- Clear error when user starts editing
         dialog.errorLabel:SetText("")
-        -- Auto-suggest title if name box is still empty or has a prior suggestion
-        local text = self:GetText()
-        if not text or text:match("^%s*$") then return end
-        local data = EWL.ParseJSON(text)
-        if not data then return end
-        if EWL.IsRaidbotsFormat(data) then
-            data = EWL.NormalizeRaidbots(data)
-        end
-        local suggested = SuggestTitle(data)
-        if suggested ~= "" and dialog.nameBox:GetText():match("^%s*$") then
-            dialog.nameBox:SetText(suggested)
-        end
     end)
     scrollFrame:SetScrollChild(editBox)
 
@@ -126,22 +85,16 @@ local function CreateImportDialog()
             data = EWL.NormalizeRaidbots(data)
         end
 
-        local nameText = dialog.nameBox:GetText()
-        if nameText:match("^%s*$") then
-            nameText = SuggestTitle(data)
-        end
-
-        local ok, saveErr = EWL.SaveReport(data, nameText)
+        local ok, saveErr = EWL.SaveReport(data)
         if not ok then
             errorLabel:SetText("Import failed: " .. (saveErr or "unknown error"))
             return
         end
 
         editBox:SetText("")
-        nameBox:SetText("")
         dialog:Hide()
         EWL.RefreshMainWindow()
-        print("|cff00ff96EasyWishlist:|r Report imported successfully for " .. (data.spec or "unknown spec") .. ".")
+        print("|cff00ff96EasyWishlist:|r Merged into " .. (data.spec or "unknown spec") .. " report.")
     end)
 
     -- Cancel button
@@ -151,12 +104,10 @@ local function CreateImportDialog()
     cancelBtn:SetText("Cancel")
     cancelBtn:SetScript("OnClick", function()
         editBox:SetText("")
-        nameBox:SetText("")
         errorLabel:SetText("")
         dialog:Hide()
     end)
 
-    -- Close on Escape via UISpecialFrames
     tinsert(UISpecialFrames, "EWLImportDialog")
 
     dialog.editBox = editBox
@@ -169,7 +120,6 @@ function EWL.OpenImportDialog()
         importDialog = CreateImportDialog()
     end
     importDialog.errorLabel:SetText("")
-    importDialog.nameBox:SetText("")
     importDialog:Show()
     importDialog.editBox:SetFocus()
 end

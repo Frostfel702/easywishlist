@@ -4,7 +4,6 @@
 EWL = {}
 
 local ADDON_NAME = "EasyWishlist"
-local MAX_REPORTS = 20
 
 -- ─── SavedVariables Init ───────────────────────────────────────────────────
 
@@ -25,25 +24,44 @@ end
 function EWL.GetCharacterKey()
     local name = UnitName("player") or "Unknown"
     local realm = GetRealmName() or "Unknown"
-    -- Normalize realm: remove spaces and hyphens for consistency
     realm = realm:gsub("[%s%-]", "")
     return name .. "-" .. realm
 end
 
 -- ─── Migration ────────────────────────────────────────────────────────────
 
--- Migrates a character's data from the old single-report format to the new
--- multi-report wrapper format. Safe to call multiple times.
+-- Handles both old formats:
+--   v1: reports[key] = { results, spec, ... }       (single report directly)
+--   v2: reports[key] = { activeIndex, list = {...} } (previous multi-report attempt)
+-- Both are migrated into v3: { activeSpec, bySpec = { [spec] = { spec, lastUpdated, results } } }
 local function MigrateIfNeeded(key)
     local data = EasyWishlistDB.reports[key]
     if not data then return end
-    -- Old format has .results directly on the top-level table
+    if data.bySpec then return end  -- already v3
+
+    local report
     if data.results then
-        data.title = data.spec or "Imported Report"
+        -- v1
+        report = data
+    elseif data.list and data.list[1] then
+        -- v2: use the active entry or first
+        report = data.list[data.activeIndex or 1]
+    end
+
+    if report and report.spec then
+        local spec = report.spec
         EasyWishlistDB.reports[key] = {
-            activeIndex = 1,
-            list = { data },
+            activeSpec = spec,
+            bySpec = {
+                [spec] = {
+                    spec        = spec,
+                    lastUpdated = report.dateCreated or "",
+                    results     = report.results or {},
+                }
+            }
         }
+    else
+        EasyWishlistDB.reports[key] = nil
     end
 end
 
@@ -53,50 +71,50 @@ function EWL.GetCurrentReport()
     local key = EWL.GetCharacterKey()
     MigrateIfNeeded(key)
     local wrapper = EasyWishlistDB.reports[key]
-    if not wrapper then return nil end
-    return wrapper.list[wrapper.activeIndex]
+    if not wrapper or not wrapper.activeSpec then return nil end
+    return wrapper.bySpec[wrapper.activeSpec]
 end
 
-function EWL.GetReportList()
+-- Returns sorted list of spec names and the currently active spec name.
+function EWL.GetSpecList()
     local key = EWL.GetCharacterKey()
     MigrateIfNeeded(key)
     local wrapper = EasyWishlistDB.reports[key]
-    if not wrapper then return {}, 0 end
-    local out = {}
-    for i, r in ipairs(wrapper.list) do
-        out[i] = {
-            title       = r.title or ("Report " .. i),
-            spec        = r.spec,
-            contentType = r.contentType,
-            dateCreated = r.dateCreated,
-        }
+    if not wrapper or not wrapper.bySpec then return {}, nil end
+    local specs = {}
+    for specName in pairs(wrapper.bySpec) do
+        specs[#specs + 1] = specName
     end
-    return out, wrapper.activeIndex
+    table.sort(specs)
+    return specs, wrapper.activeSpec
 end
 
-function EWL.SetActiveReport(index)
+function EWL.SetActiveSpec(spec)
     local key = EWL.GetCharacterKey()
     MigrateIfNeeded(key)
     local wrapper = EasyWishlistDB.reports[key]
-    if not wrapper then return end
-    local total = #wrapper.list
-    if total == 0 then return end
-    wrapper.activeIndex = math.max(1, math.min(index, total))
+    if not wrapper or not wrapper.bySpec[spec] then return end
+    wrapper.activeSpec = spec
 end
 
-function EWL.DeleteReport(index)
+function EWL.DeleteSpec(spec)
     local key = EWL.GetCharacterKey()
     MigrateIfNeeded(key)
     local wrapper = EasyWishlistDB.reports[key]
-    if not wrapper then return end
-    if #wrapper.list <= 1 then return end -- must keep at least one
-    table.remove(wrapper.list, index)
-    -- Clamp activeIndex so it stays valid
-    wrapper.activeIndex = math.max(1, math.min(wrapper.activeIndex, #wrapper.list))
+    if not wrapper or not wrapper.bySpec then return end
+    local count = 0
+    for _ in pairs(wrapper.bySpec) do count = count + 1 end
+    if count <= 1 then return end
+    wrapper.bySpec[spec] = nil
+    if wrapper.activeSpec == spec then
+        local remaining = {}
+        for s in pairs(wrapper.bySpec) do remaining[#remaining + 1] = s end
+        table.sort(remaining)
+        wrapper.activeSpec = remaining[1]
+    end
 end
 
-function EWL.SaveReport(data, title)
-    -- Validate required fields
+function EWL.SaveReport(data)
     if not data.results or type(data.results) ~= "table" then
         return false, "Missing or invalid 'results' field"
     end
@@ -106,7 +124,6 @@ function EWL.SaveReport(data, title)
     if not data.playername then
         return false, "Missing 'playername' field"
     end
-    -- realm is optional (Raidbots exports don't include it)
     if data.realm == nil then
         data.realm = ""
     end
@@ -114,50 +131,52 @@ function EWL.SaveReport(data, title)
         return false, "Results list is empty"
     end
 
-    -- Filter out zero-score items and sort descending by percDiff
-    local results = {}
+    -- Filter zero-or-negative upgrades
+    local newResults = {}
     for _, r in ipairs(data.results) do
         if r.percDiff and r.percDiff > 0 and r.item then
-            results[#results + 1] = r
+            newResults[#newResults + 1] = r
         end
     end
-    table.sort(results, function(a, b)
-        return (a.percDiff or 0) > (b.percDiff or 0)
-    end)
 
-    if not title or title:match("^%s*$") then
-        local ct = data.contentType or ""
-        title = (data.spec or "Report") .. (ct ~= "" and (" - " .. ct) or "")
-    end
-
-    local entry = {
-        title       = title,
-        id          = data.id,
-        dateCreated = data.dateCreated,
-        playername  = data.playername,
-        realm       = data.realm,
-        spec        = data.spec,
-        contentType = data.contentType,
-        ufSettings  = data.ufSettings,
-        gameType    = data.gameType,
-        results     = results,
-    }
-
-    local key = EWL.GetCharacterKey()
+    local spec = data.spec
+    local key  = EWL.GetCharacterKey()
     MigrateIfNeeded(key)
+
     local wrapper = EasyWishlistDB.reports[key]
     if not wrapper then
-        wrapper = { activeIndex = 1, list = {} }
+        wrapper = { activeSpec = spec, bySpec = {} }
         EasyWishlistDB.reports[key] = wrapper
     end
 
-    -- Cap at MAX_REPORTS: drop the oldest entry if full
-    if #wrapper.list >= MAX_REPORTS then
-        table.remove(wrapper.list, 1)
+    -- Get or create spec bucket
+    if not wrapper.bySpec[spec] then
+        wrapper.bySpec[spec] = { spec = spec, lastUpdated = "", results = {} }
+    end
+    local bucket = wrapper.bySpec[spec]
+
+    -- Merge: build lookup by itemID, update existing or append new
+    local byItemID = {}
+    for i, r in ipairs(bucket.results) do
+        byItemID[r.item] = i
+    end
+    for _, r in ipairs(newResults) do
+        local idx = byItemID[r.item]
+        if idx then
+            bucket.results[idx] = r
+        else
+            bucket.results[#bucket.results + 1] = r
+            byItemID[r.item] = #bucket.results
+        end
     end
 
-    wrapper.list[#wrapper.list + 1] = entry
-    wrapper.activeIndex = #wrapper.list
+    -- Re-sort descending by percDiff
+    table.sort(bucket.results, function(a, b)
+        return (a.percDiff or 0) > (b.percDiff or 0)
+    end)
+
+    bucket.lastUpdated = data.dateCreated or ""
+    wrapper.activeSpec  = spec
 
     return true
 end
