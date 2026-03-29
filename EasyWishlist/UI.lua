@@ -617,7 +617,7 @@ local function UpdateSpecSelector(win)
 
     ss:Show()
     local shortName = activeSpec and ShortSpecName(activeSpec) or "?"
-    ss.dropBtn:SetText(shortName .. " \226\150\190")
+    ss.dropBtn:SetText(shortName .. " v")
     ss.removeBtn:SetShown(total > 1)
 end
 
@@ -679,10 +679,15 @@ local function CreateMainWindow()
     specSelector:SetHeight(20)
     win.specSelector = specSelector
 
+    local specLabel = specSelector:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    specLabel:SetPoint("LEFT", 0, 0)
+    specLabel:SetText("Spec:")
+    specLabel:SetTextColor(1, 0.82, 0)
+
     local dropBtn = CreateFrame("Button", nil, specSelector, "UIPanelButtonTemplate")
-    dropBtn:SetSize(110, 20)
-    dropBtn:SetPoint("LEFT", 0, 0)
-    dropBtn:SetText("? \226\150\190")
+    dropBtn:SetSize(120, 20)
+    dropBtn:SetPoint("LEFT", specLabel, "RIGHT", 6, 0)
+    dropBtn:SetText("? v")
     dropBtn:SetScript("OnClick", function()
         if specPopup and specPopup:IsShown() then
             CloseSpecPopup()
