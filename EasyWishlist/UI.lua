@@ -255,7 +255,7 @@ local function PopulateRow(row, result, rank, isEven)
 
     local locLabel = result.sourceName or result.dropLoc or "?"
     local diffLabel = ""
-    if result.dropLoc == "Dungeon" then
+    if result.dropLoc == "Dungeon" and locLabel ~= "Mythic+" then
         diffLabel = " Mythic+"
     elseif result.dropLoc == "Raid" and result.dropDifficulty then
         local diffNames = { [0]="LFR",[1]="LFR",[2]="Normal",[3]="Normal",[4]="Heroic",[5]="Heroic",[6]="Mythic",[7]="Mythic" }
@@ -268,7 +268,7 @@ end
 
 local function SourceKey(result)
     local name = result.sourceName or result.dropLoc or "Unknown"
-    if result.dropLoc == "Dungeon" then
+    if result.dropLoc == "Dungeon" and name ~= "Mythic+" then
         return name .. " Mythic+"
     elseif result.dropLoc == "Raid" and result.dropDifficulty then
         local diffNames = { [0]="LFR",[1]="LFR",[2]="Normal",[3]="Normal",[4]="Heroic",[5]="Heroic",[6]="Mythic",[7]="Mythic" }
