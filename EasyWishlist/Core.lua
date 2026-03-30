@@ -155,20 +155,23 @@ function EWL.SaveReport(data)
     end
     local bucket = wrapper.bySpec[spec]
 
-    -- Collect the set of sourceIds present in the incoming data
+    -- Collect the set of sourceIds and item IDs present in the incoming data
     local incomingSourceIds = {}
+    local incomingItemIds   = {}
     for _, r in ipairs(newResults) do
         if r.sourceId then
             incomingSourceIds[r.sourceId] = true
         end
+        incomingItemIds[r.item] = true
     end
 
     if next(incomingSourceIds) then
-        -- Source-replacement: drop all existing items belonging to any incoming sourceId,
-        -- then append the new ones.  Items from sources not present in this import are kept.
+        -- Source-replacement: drop existing items that match an incoming sourceId OR an
+        -- incoming itemID (the itemID check handles old-format items that have no sourceId).
         local kept = {}
         for _, r in ipairs(bucket.results) do
-            if not (r.sourceId and incomingSourceIds[r.sourceId]) then
+            local drop = (r.sourceId and incomingSourceIds[r.sourceId]) or incomingItemIds[r.item]
+            if not drop then
                 kept[#kept + 1] = r
             end
         end
