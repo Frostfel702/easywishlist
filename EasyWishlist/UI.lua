@@ -809,12 +809,10 @@ local function RefreshSidebar()
         end)
 
         row.trashBtn:SetScript("OnClick", function()
-            EWL.DeleteDungeon(capturedName)
-            if dungeonFilter == capturedName then
-                dungeonFilter = nil
+            local dialog = StaticPopup_Show("EWL_CONFIRM_DELETE_DUNGEON", capturedName)
+            if dialog then
+                dialog.data = { sourceName = capturedName }
             end
-            RefreshSidebar()
-            RefreshList(win.scrollChild)
         end)
 
         yOff = yOff + DROW_H
@@ -822,6 +820,25 @@ local function RefreshSidebar()
 
     listFrame:SetHeight(math.max(#dungeons * DROW_H, 1))
 end
+
+-- ─── Confirmation dialogs ────────────────────────────────────────────────
+
+StaticPopupDialogs["EWL_CONFIRM_DELETE_DUNGEON"] = {
+    text      = "Remove all \"%s\" items from this wishlist?",
+    button1   = "Remove",
+    button2   = "Cancel",
+    OnAccept  = function(self)
+        local name = self.data and self.data.sourceName
+        if not name then return end
+        EWL.DeleteDungeon(name)
+        if dungeonFilter == name then dungeonFilter = nil end
+        EWL.RefreshMainWindow()
+    end,
+    timeout      = 0,
+    whileDead    = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
 
 -- ─── Main window ─────────────────────────────────────────────────────────
 
