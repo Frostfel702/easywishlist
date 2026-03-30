@@ -30,33 +30,50 @@ end
 
 -- ─── Migration ────────────────────────────────────────────────────────────
 
--- Handles both old formats:
---   v1: reports[key] = { results, spec, ... }       (single report directly)
---   v2: reports[key] = { activeIndex, list = {...} } (previous multi-report attempt)
--- Both are migrated into v3: { activeSpec, bySpec = { [spec] = { spec, lastUpdated, results } } }
+-- Handles all legacy formats and migrates to v4:
+--   v1: reports[key] = { results, spec, ... }
+--   v2: reports[key] = { activeIndex, list = {...} }
+--   v3: reports[key] = { activeSpec, bySpec = { [spec] = { spec, lastUpdated, results } } }
+-- Target v4: { activeWishlist, byWishlist = { [name] = { lastUpdated, results, dungeonImports } } }
 local function MigrateIfNeeded(key)
     local data = EasyWishlistDB.reports[key]
     if not data then return end
-    if data.bySpec then return end  -- already v3
+    if data.byWishlist then return end  -- already v4
 
+    -- v3 → v4: rename bySpec to byWishlist
+    if data.bySpec then
+        local byWishlist = {}
+        for specName, bucket in pairs(data.bySpec) do
+            byWishlist[specName] = {
+                lastUpdated    = bucket.lastUpdated or "",
+                results        = bucket.results or {},
+                dungeonImports = {},
+            }
+        end
+        EasyWishlistDB.reports[key] = {
+            activeWishlist = data.activeSpec or next(byWishlist),
+            byWishlist     = byWishlist,
+        }
+        return
+    end
+
+    -- v1/v2 → v4
     local report
     if data.results then
-        -- v1
         report = data
     elseif data.list and data.list[1] then
-        -- v2: use the active entry or first
         report = data.list[data.activeIndex or 1]
     end
 
     if report and report.spec then
         local spec = report.spec
         EasyWishlistDB.reports[key] = {
-            activeSpec = spec,
-            bySpec = {
+            activeWishlist = spec,
+            byWishlist = {
                 [spec] = {
-                    spec        = spec,
-                    lastUpdated = report.dateCreated or "",
-                    results     = report.results or {},
+                    lastUpdated    = report.dateCreated or "",
+                    results        = report.results or {},
+                    dungeonImports = {},
                 }
             }
         }
@@ -71,55 +88,86 @@ function EWL.GetCurrentReport()
     local key = EWL.GetCharacterKey()
     MigrateIfNeeded(key)
     local wrapper = EasyWishlistDB.reports[key]
-    if not wrapper or not wrapper.activeSpec then return nil end
-    return wrapper.bySpec[wrapper.activeSpec]
+    if not wrapper or not wrapper.activeWishlist then return nil end
+    return wrapper.byWishlist[wrapper.activeWishlist]
 end
 
--- Returns sorted list of spec names and the currently active spec name.
-function EWL.GetSpecList()
+-- Returns sorted list of wishlist names and the currently active one.
+function EWL.GetWishlists()
     local key = EWL.GetCharacterKey()
     MigrateIfNeeded(key)
     local wrapper = EasyWishlistDB.reports[key]
-    if not wrapper or not wrapper.bySpec then return {}, nil end
-    local specs = {}
-    for specName in pairs(wrapper.bySpec) do
-        specs[#specs + 1] = specName
+    if not wrapper or not wrapper.byWishlist then return {}, nil end
+    local names = {}
+    for name in pairs(wrapper.byWishlist) do
+        names[#names + 1] = name
     end
-    table.sort(specs)
-    return specs, wrapper.activeSpec
+    table.sort(names)
+    return names, wrapper.activeWishlist
 end
 
-function EWL.SetActiveSpec(spec)
+function EWL.SetActiveWishlist(name)
     local key = EWL.GetCharacterKey()
     MigrateIfNeeded(key)
     local wrapper = EasyWishlistDB.reports[key]
-    if not wrapper or not wrapper.bySpec[spec] then return end
-    wrapper.activeSpec = spec
+    if not wrapper or not wrapper.byWishlist[name] then return end
+    wrapper.activeWishlist = name
 end
 
-function EWL.DeleteSpec(spec)
+function EWL.DeleteWishlist(name)
     local key = EWL.GetCharacterKey()
     MigrateIfNeeded(key)
     local wrapper = EasyWishlistDB.reports[key]
-    if not wrapper or not wrapper.bySpec then return end
+    if not wrapper or not wrapper.byWishlist then return end
     local count = 0
-    for _ in pairs(wrapper.bySpec) do count = count + 1 end
+    for _ in pairs(wrapper.byWishlist) do count = count + 1 end
     if count <= 1 then return end
-    wrapper.bySpec[spec] = nil
-    if wrapper.activeSpec == spec then
+    wrapper.byWishlist[name] = nil
+    if wrapper.activeWishlist == name then
         local remaining = {}
-        for s in pairs(wrapper.bySpec) do remaining[#remaining + 1] = s end
+        for n in pairs(wrapper.byWishlist) do remaining[#remaining + 1] = n end
         table.sort(remaining)
-        wrapper.activeSpec = remaining[1]
+        wrapper.activeWishlist = remaining[1]
     end
 end
 
-function EWL.SaveReport(data)
+-- Returns sorted list of {name, lastUpdated} for dungeons imported into the current wishlist.
+function EWL.GetDungeonList()
+    local report = EWL.GetCurrentReport()
+    if not report then return {} end
+    local imports = report.dungeonImports or {}
+    local list = {}
+    for name, date in pairs(imports) do
+        list[#list + 1] = { name = name, lastUpdated = date }
+    end
+    table.sort(list, function(a, b) return a.name < b.name end)
+    return list
+end
+
+-- Removes a dungeon's items from the current wishlist and its import tracking entry.
+function EWL.DeleteDungeon(sourceName)
+    local report = EWL.GetCurrentReport()
+    if not report then return end
+    if report.results then
+        local kept = {}
+        for _, r in ipairs(report.results) do
+            if (r.sourceName or r.dropLoc or "Unknown") ~= sourceName then
+                kept[#kept + 1] = r
+            end
+        end
+        report.results = kept
+    end
+    if report.dungeonImports then
+        report.dungeonImports[sourceName] = nil
+    end
+end
+
+function EWL.SaveReport(data, wishlistName)
+    if not wishlistName or wishlistName:match("^%s*$") then
+        return false, "Wishlist name is required"
+    end
     if not data.results or type(data.results) ~= "table" then
         return false, "Missing or invalid 'results' field"
-    end
-    if not data.spec then
-        return false, "Missing 'spec' field"
     end
     if not data.playername then
         return false, "Missing 'playername' field"
@@ -139,21 +187,20 @@ function EWL.SaveReport(data)
         end
     end
 
-    local spec = data.spec
-    local key  = EWL.GetCharacterKey()
+    local key = EWL.GetCharacterKey()
     MigrateIfNeeded(key)
 
     local wrapper = EasyWishlistDB.reports[key]
     if not wrapper then
-        wrapper = { activeSpec = spec, bySpec = {} }
+        wrapper = { activeWishlist = wishlistName, byWishlist = {} }
         EasyWishlistDB.reports[key] = wrapper
     end
 
-    -- Get or create spec bucket
-    if not wrapper.bySpec[spec] then
-        wrapper.bySpec[spec] = { spec = spec, lastUpdated = "", results = {} }
+    if not wrapper.byWishlist[wishlistName] then
+        wrapper.byWishlist[wishlistName] = { lastUpdated = "", results = {}, dungeonImports = {} }
     end
-    local bucket = wrapper.bySpec[spec]
+    local bucket = wrapper.byWishlist[wishlistName]
+    if not bucket.dungeonImports then bucket.dungeonImports = {} end
 
     -- Collect the set of sourceIds and item IDs present in the incoming data
     local incomingSourceIds = {}
@@ -166,8 +213,7 @@ function EWL.SaveReport(data)
     end
 
     if next(incomingSourceIds) then
-        -- Source-replacement: drop existing items that match an incoming sourceId OR an
-        -- incoming itemID (the itemID check handles old-format items that have no sourceId).
+        -- Source-replacement: drop existing items that match an incoming sourceId OR itemID
         local kept = {}
         for _, r in ipairs(bucket.results) do
             local drop = (r.sourceId and incomingSourceIds[r.sourceId]) or incomingItemIds[r.item]
@@ -201,8 +247,17 @@ function EWL.SaveReport(data)
         return (a.percDiff or 0) > (b.percDiff or 0)
     end)
 
-    bucket.lastUpdated = data.dateCreated or ""
-    wrapper.activeSpec  = spec
+    -- Track dungeon import timestamps per sourceName
+    local importDate = data.dateCreated or ""
+    for _, r in ipairs(newResults) do
+        local src = r.sourceName or r.dropLoc or "Unknown"
+        if importDate ~= "" or not bucket.dungeonImports[src] then
+            bucket.dungeonImports[src] = importDate ~= "" and importDate or "imported"
+        end
+    end
+
+    bucket.lastUpdated = importDate
+    wrapper.activeWishlist = wishlistName
 
     return true
 end
@@ -252,7 +307,6 @@ frame:SetScript("OnEvent", function(self, event, arg1)
         InitDB()
     elseif event == "PLAYER_LOGIN" then
         -- Character name/realm are available after PLAYER_LOGIN
-        -- Nothing to do here for now
     end
 end)
 

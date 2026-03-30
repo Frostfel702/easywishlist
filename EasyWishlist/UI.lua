@@ -1,30 +1,37 @@
 -- EasyWishlist - UI.lua
--- Main window: header, scrolling item list, tooltips
+-- Main window: sidebar, item list, tooltips
 
-local WINDOW_W  = 540
-local WINDOW_H  = 464   -- extra height for report nav bar
+-- ─── Layout constants ─────────────────────────────────────────────────────
+
+local WINDOW_W  = 730
+local WINDOW_H  = 464
+local SIDEBAR_W = 180
+local RP_X      = 204   -- right panel x offset from window left (14 + SIDEBAR_W + 10)
+local RP_W      = 510   -- right panel width (WINDOW_W - RP_X - 16)
 local ROW_H     = 32
 local HEADER_H  = 22
 local ICON_SIZE = 24
+local DROW_H    = 40    -- dungeon sidebar row height
 local COL = {
     rank   = { x = 14,  w = 24  },
     icon   = { x = 42,  w = 26  },
     name   = { x = 72,  w = 200 },
     ilvl   = { x = 276, w = 40  },
     pct    = { x = 320, w = 52  },
-    source = { x = 376, w = 130 },
+    source = { x = 376, w = 110 },
 }
 
 local mainWindow
-local rowPool        = {}
-local activeRows     = {}
-local groupHdrPool   = {}
+local rowPool         = {}
+local activeRows      = {}
+local groupHdrPool    = {}
 local activeGroupHdrs = {}
 
--- ─── Group state ─────────────────────────────────────────────────────────
+-- ─── State ───────────────────────────────────────────────────────────────
 
-local groupMode  = "none"   -- "none" | "source" | "slot"
-local slotCache  = {}       -- itemID -> display slot name
+local groupMode    = "none"   -- "none" | "source" | "slot"
+local dungeonFilter = nil     -- sourceName string or nil
+local slotCache    = {}       -- itemID -> display slot name
 
 local SLOT_FROM_SIM = {
     head="Head", neck="Neck", shoulder="Shoulders", back="Back",
@@ -173,7 +180,6 @@ local function GetRow(parent)
     sourceText:SetTextColor(0.7, 0.7, 0.7)
     row.sourceText = sourceText
 
-    -- Tooltip
     row:SetScript("OnEnter", function(self)
         if self.itemID then
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -218,7 +224,7 @@ local function PopulateRow(row, result, rank, isEven)
     row.result  = result
     row.rank    = rank
     row.isEven  = isEven
-    row:SetWidth(WINDOW_W - 20)
+    row:SetWidth(RP_W - 14)
 
     if isEven then
         row.bg:SetColorTexture(1, 1, 1, 0.04)
@@ -234,7 +240,6 @@ local function PopulateRow(row, result, rank, isEven)
         row.nameText:SetText(name)
         row.nameText:SetTextColor(r, g, b)
         row.icon:SetTexture(texture or "Interface\\Icons\\INV_Misc_QuestionMark")
-        -- Cache slot from invType if not already cached
         if invType and invType ~= "" and not slotCache[result.item] then
             slotCache[result.item] = SLOT_FROM_INVTYPE[invType] or invType
         end
@@ -351,12 +356,12 @@ end
 
 local function ShowEmptyState(contentFrame, show)
     if not contentFrame.tutorialFrame then
-        -- Parent to the main window (scrollChild → scrollFrame → win) so
-        -- interactive elements (buttons, editboxes) receive mouse events correctly.
-        local win = contentFrame:GetParent():GetParent()
+        local win = contentFrame.mainWin
+        local rightPanel = contentFrame.rightPanel
         local f = CreateFrame("Frame", nil, win)
-        f:SetPoint("TOPLEFT", win, "TOPLEFT", 14, -132)
-        f:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -30, 14)
+        -- Anchor to the scroll area within the right panel
+        f:SetPoint("TOPLEFT",     rightPanel, "TOPLEFT",     14, -56)
+        f:SetPoint("BOTTOMRIGHT", rightPanel, "BOTTOMRIGHT", -6,   0)
         f:SetFrameStrata("MEDIUM")
         contentFrame.tutorialFrame = f
 
@@ -391,14 +396,14 @@ local function ShowEmptyState(contentFrame, show)
 
             local labelStr = f:CreateFontString(nil, "OVERLAY", "GameFontNormal")
             labelStr:SetPoint("TOPLEFT", numStr, "TOPRIGHT", 6, 0)
-            labelStr:SetWidth(440)
+            labelStr:SetWidth(RP_W - 60)
             labelStr:SetText(step.label)
             labelStr:SetJustifyH("LEFT")
             labelStr:SetTextColor(1, 1, 1)
 
             local descStr = f:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
             descStr:SetPoint("TOPLEFT", numStr, "BOTTOMLEFT", 0, -2)
-            descStr:SetWidth(440)
+            descStr:SetWidth(RP_W - 60)
             descStr:SetText(step.desc)
             descStr:SetJustifyH("LEFT")
             descStr:SetTextColor(0.7, 0.7, 0.7)
@@ -421,7 +426,7 @@ end
 -- ─── Refresh list ────────────────────────────────────────────────────────
 
 local function RefreshList(scrollChild)
-    for _, row in ipairs(activeRows)     do ReleaseRow(row)      end
+    for _, row in ipairs(activeRows)      do ReleaseRow(row)     end
     for _, h   in ipairs(activeGroupHdrs) do ReleaseGroupHdr(h)  end
     wipe(activeRows)
     wipe(activeGroupHdrs)
@@ -431,7 +436,19 @@ local function RefreshList(scrollChild)
     ShowEmptyState(scrollChild, not report or not report.results or #report.results == 0)
     if not report or not report.results then return end
 
-    local displayList = BuildDisplayList(report.results)
+    -- Apply dungeon filter
+    local results = report.results
+    if dungeonFilter then
+        local filtered = {}
+        for _, r in ipairs(results) do
+            if (r.sourceName or r.dropLoc or "Unknown") == dungeonFilter then
+                filtered[#filtered + 1] = r
+            end
+        end
+        results = filtered
+    end
+
+    local displayList = BuildDisplayList(results)
 
     local totalH = 0
     for _, entry in ipairs(displayList) do
@@ -443,7 +460,7 @@ local function RefreshList(scrollChild)
     for _, entry in ipairs(displayList) do
         if entry.type == "header" then
             local h = GetGroupHdr(scrollChild)
-            h:SetWidth(WINDOW_W - 20)
+            h:SetWidth(RP_W - 14)
             h:SetPoint("TOPLEFT", 0, -yOffset)
             h.lbl:SetText(entry.label)
             h.count:SetText(entry.count .. " items")
@@ -458,8 +475,6 @@ local function RefreshList(scrollChild)
         end
     end
 end
-
--- ─── Header info ─────────────────────────────────────────────────────────
 
 -- ─── URL copy dialog ─────────────────────────────────────────────────────
 
@@ -518,46 +533,42 @@ function EWL.OpenUrlDialog()
     urlDialog:Show()
 end
 
--- ─── Spec selector helpers ────────────────────────────────────────────────
+-- ─── Wishlist popup ───────────────────────────────────────────────────────
 
-local specPopup
+local wishlistPopup
 
-local function ShortSpecName(fullSpec)
-    return (fullSpec:match("^(%S+)") or fullSpec)
+local function CloseWishlistPopup()
+    if wishlistPopup then wishlistPopup:Hide() end
 end
 
-local function CloseSpecPopup()
-    if specPopup then specPopup:Hide() end
-end
+local function OpenWishlistPopup(anchor)
+    local wishlists, activeWishlist = EWL.GetWishlists()
 
-local function OpenSpecPopup(anchor)
-    local specs, activeSpec = EWL.GetSpecList()
-
-    if not specPopup then
-        specPopup = CreateFrame("Frame", "EWLSpecPopup", UIParent, "BackdropTemplate")
-        specPopup:SetFrameStrata("TOOLTIP")
-        specPopup:SetBackdrop({
+    if not wishlistPopup then
+        wishlistPopup = CreateFrame("Frame", "EWLWishlistPopup", UIParent, "BackdropTemplate")
+        wishlistPopup:SetFrameStrata("TOOLTIP")
+        wishlistPopup:SetBackdrop({
             bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
             edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
             tile = true, tileSize = 32, edgeSize = 16,
             insets = { left = 4, right = 4, top = 4, bottom = 4 },
         })
-        specPopup.rows = {}
+        wishlistPopup.rows = {}
     end
 
     -- Hide/recycle existing rows
-    for _, r in ipairs(specPopup.rows) do r:Hide() end
-    wipe(specPopup.rows)
+    for _, r in ipairs(wishlistPopup.rows) do r:Hide() end
+    wipe(wishlistPopup.rows)
 
-    local ROW_H = 22
-    local PAD   = 8
-    local WIDTH = 130
-    local yOff  = -PAD
+    local PROW_H = 22
+    local PAD    = 8
+    local WIDTH  = SIDEBAR_W - 4
+    local yOff   = -PAD
 
-    for _, spec in ipairs(specs) do
-        local row = CreateFrame("Button", nil, specPopup)
-        row:SetHeight(ROW_H)
-        row:SetPoint("TOPLEFT",  PAD, yOff)
+    for _, name in ipairs(wishlists) do
+        local row = CreateFrame("Button", nil, wishlistPopup)
+        row:SetHeight(PROW_H)
+        row:SetPoint("TOPLEFT",  PAD,  yOff)
         row:SetPoint("TOPRIGHT", -PAD, yOff)
 
         local hl = row:CreateTexture(nil, "HIGHLIGHT")
@@ -572,9 +583,9 @@ local function OpenSpecPopup(anchor)
         local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
         lbl:SetPoint("LEFT", 14, 0)
         lbl:SetJustifyH("LEFT")
-        lbl:SetText(ShortSpecName(spec))
+        lbl:SetText(name)
 
-        if spec == activeSpec then
+        if name == activeWishlist then
             dot:SetText("|cff00ff96●|r")
             lbl:SetTextColor(1, 1, 1)
         else
@@ -582,57 +593,212 @@ local function OpenSpecPopup(anchor)
             lbl:SetTextColor(0.7, 0.7, 0.7)
         end
 
-        local capturedSpec = spec
+        local capturedName = name
         row:SetScript("OnClick", function()
-            EWL.SetActiveSpec(capturedSpec)
-            CloseSpecPopup()
+            EWL.SetActiveWishlist(capturedName)
+            dungeonFilter = nil
+            CloseWishlistPopup()
             EWL.RefreshMainWindow()
         end)
 
         row:Show()
-        specPopup.rows[#specPopup.rows + 1] = row
-        yOff = yOff - ROW_H
+        wishlistPopup.rows[#wishlistPopup.rows + 1] = row
+        yOff = yOff - PROW_H
     end
 
-    local totalH = PAD * 2 + #specs * ROW_H
-    specPopup:SetSize(WIDTH, totalH)
-    specPopup:ClearAllPoints()
-    specPopup:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
-    specPopup:Show()
+    -- Delete current wishlist option (only if more than one exists)
+    if #wishlists > 1 then
+        -- Separator
+        local sep = CreateFrame("Frame", nil, wishlistPopup)
+        sep:SetHeight(9)
+        sep:SetPoint("TOPLEFT",  PAD,  yOff - 2)
+        sep:SetPoint("TOPRIGHT", -PAD, yOff - 2)
+        local sepLine = sep:CreateTexture(nil, "ARTWORK")
+        sepLine:SetPoint("TOPLEFT",  0, -4)
+        sepLine:SetPoint("TOPRIGHT", 0, -4)
+        sepLine:SetHeight(1)
+        sepLine:SetColorTexture(0.4, 0.4, 0.4, 0.6)
+        sep:Show()
+        wishlistPopup.rows[#wishlistPopup.rows + 1] = sep
+        yOff = yOff - 11
+
+        local delRow = CreateFrame("Button", nil, wishlistPopup)
+        delRow:SetHeight(PROW_H)
+        delRow:SetPoint("TOPLEFT",  PAD,  yOff)
+        delRow:SetPoint("TOPRIGHT", -PAD, yOff)
+
+        local delHl = delRow:CreateTexture(nil, "HIGHLIGHT")
+        delHl:SetAllPoints()
+        delHl:SetColorTexture(1, 0.3, 0.3, 0.12)
+
+        local delLbl = delRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        delLbl:SetPoint("LEFT", 0, 0)
+        delLbl:SetJustifyH("LEFT")
+        local shortName = activeWishlist and (activeWishlist:sub(1, 16) .. (activeWishlist:len() > 16 and "..." or "")) or "?"
+        delLbl:SetText("|cffff6666Delete \"" .. shortName .. "\"|r")
+
+        delRow:SetScript("OnClick", function()
+            if activeWishlist then
+                EWL.DeleteWishlist(activeWishlist)
+                dungeonFilter = nil
+            end
+            CloseWishlistPopup()
+            EWL.RefreshMainWindow()
+        end)
+
+        delRow:Show()
+        wishlistPopup.rows[#wishlistPopup.rows + 1] = delRow
+        yOff = yOff - PROW_H - 4
+    end
+
+    local totalH = PAD + (-yOff)
+    wishlistPopup:SetSize(WIDTH, totalH)
+    wishlistPopup:ClearAllPoints()
+    wishlistPopup:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
+    wishlistPopup:Show()
 end
 
--- ─── Header / spec selector update ───────────────────────────────────────
+-- ─── Sidebar refresh ─────────────────────────────────────────────────────
 
-local function UpdateSpecSelector(win)
-    if not win.specSelector then return end
-    local specs, activeSpec = EWL.GetSpecList()
-    local total = #specs
-    local ss = win.specSelector
+local function RefreshSidebar()
+    if not mainWindow then return end
+    local win = mainWindow
 
-    if total <= 1 then
-        ss:Hide()
-        CloseSpecPopup()
-        return
+    -- Update wishlist dropdown label
+    local wishlists, activeWishlist = EWL.GetWishlists()
+    if win.wishlistDropBtn then
+        if activeWishlist then
+            local short = activeWishlist:len() > 18 and activeWishlist:sub(1, 16) .. "..." or activeWishlist
+            win.wishlistDropBtn:SetText(short .. " v")
+        else
+            win.wishlistDropBtn:SetText("None v")
+        end
     end
 
-    ss:Show()
-    local shortName = activeSpec and ShortSpecName(activeSpec) or "?"
-    ss.dropBtn:SetText(shortName .. " v")
-    ss.removeBtn:SetShown(total > 1)
-end
+    -- Rebuild dungeon rows
+    local dungeons   = EWL.GetDungeonList()
+    local listFrame  = win.dungeonListFrame
+    if not listFrame then return end
 
-local function UpdateHeader(win)
-    local infoLabel = win.infoLabel
-    local report = EWL.GetCurrentReport()
-    if not report then
-        infoLabel:SetText("")
-    else
-        local text = string.format("|cffffd700%s|r  |cff888888Last updated: %s|r",
-            report.spec or "?",
-            report.lastUpdated or "")
-        infoLabel:SetText(text)
+    win.dungeonRows = win.dungeonRows or {}
+
+    -- Ensure enough pooled row frames exist
+    while #win.dungeonRows < #dungeons do
+        local row = CreateFrame("Button", nil, listFrame)
+        row:SetHeight(DROW_H)
+
+        local bg = row:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        row.bg = bg
+
+        local hl = row:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints()
+        hl:SetColorTexture(1, 1, 1, 0.06)
+
+        -- Active filter indicator bar on the left
+        local bar = row:CreateTexture(nil, "ARTWORK")
+        bar:SetWidth(2)
+        bar:SetPoint("TOPLEFT", 0, 0)
+        bar:SetPoint("BOTTOMLEFT", 0, 0)
+        bar:SetColorTexture(1, 0.82, 0, 0.9)
+        row.bar = bar
+
+        local nameText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        nameText:SetPoint("TOPLEFT", 8, -5)
+        nameText:SetPoint("TOPRIGHT", -24, -5)
+        nameText:SetJustifyH("LEFT")
+        row.nameText = nameText
+
+        local dateText = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        dateText:SetPoint("TOPLEFT", 8, -19)
+        dateText:SetPoint("TOPRIGHT", -24, -19)
+        dateText:SetJustifyH("LEFT")
+        row.dateText = dateText
+
+        -- Trash button
+        local trashBtn = CreateFrame("Button", nil, row)
+        trashBtn:SetSize(18, 18)
+        trashBtn:SetPoint("RIGHT", -3, 0)
+
+        local trashBg = trashBtn:CreateTexture(nil, "BACKGROUND")
+        trashBg:SetAllPoints()
+        trashBg:SetColorTexture(0.6, 0.1, 0.1, 0)
+        trashBtn.bg = trashBg
+
+        local trashHl = trashBtn:CreateTexture(nil, "HIGHLIGHT")
+        trashHl:SetAllPoints()
+        trashHl:SetColorTexture(1, 0.2, 0.2, 0.25)
+
+        local trashLbl = trashBtn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        trashLbl:SetPoint("CENTER")
+        trashLbl:SetText("|cffaa3333x|r")
+        trashBtn:SetScript("OnEnter", function() trashBg:SetColorTexture(0.6, 0.1, 0.1, 0.4) end)
+        trashBtn:SetScript("OnLeave", function() trashBg:SetColorTexture(0.6, 0.1, 0.1, 0) end)
+        row.trashBtn = trashBtn
+
+        -- Separator line below row
+        local sep = row:CreateTexture(nil, "ARTWORK")
+        sep:SetPoint("BOTTOMLEFT",  2, 0)
+        sep:SetPoint("BOTTOMRIGHT", -2, 0)
+        sep:SetHeight(1)
+        sep:SetColorTexture(0.3, 0.3, 0.3, 0.4)
+
+        win.dungeonRows[#win.dungeonRows + 1] = row
     end
-    UpdateSpecSelector(win)
+
+    -- Hide all rows
+    for _, r in ipairs(win.dungeonRows) do
+        r:Hide()
+        r:SetScript("OnClick", nil)
+        r.trashBtn:SetScript("OnClick", nil)
+    end
+
+    -- Populate visible rows
+    local yOff = 0
+    for i, dungeon in ipairs(dungeons) do
+        local row = win.dungeonRows[i]
+        local isActive = (dungeonFilter == dungeon.name)
+
+        row:ClearAllPoints()
+        row:SetPoint("TOPLEFT",  0, -yOff)
+        row:SetPoint("TOPRIGHT", 0, -yOff)
+        row:Show()
+
+        if isActive then
+            row.bg:SetColorTexture(1, 0.82, 0, 0.10)
+            row.bar:Show()
+            row.nameText:SetTextColor(1, 0.9, 0.4)
+        else
+            row.bg:SetColorTexture(0, 0, 0, 0)
+            row.bar:Hide()
+            row.nameText:SetTextColor(0.85, 0.85, 0.85)
+        end
+
+        row.nameText:SetText(dungeon.name)
+
+        local dateDisplay = (dungeon.lastUpdated ~= "" and dungeon.lastUpdated) or "imported"
+        row.dateText:SetText("|cff666666" .. dateDisplay .. "|r")
+
+        local capturedName = dungeon.name
+        row:SetScript("OnClick", function()
+            dungeonFilter = (dungeonFilter == capturedName) and nil or capturedName
+            RefreshSidebar()
+            RefreshList(win.scrollChild)
+        end)
+
+        row.trashBtn:SetScript("OnClick", function()
+            EWL.DeleteDungeon(capturedName)
+            if dungeonFilter == capturedName then
+                dungeonFilter = nil
+            end
+            RefreshSidebar()
+            RefreshList(win.scrollChild)
+        end)
+
+        yOff = yOff + DROW_H
+    end
+
+    listFrame:SetHeight(math.max(#dungeons * DROW_H, 1))
 end
 
 -- ─── Main window ─────────────────────────────────────────────────────────
@@ -655,83 +821,98 @@ local function CreateMainWindow()
         insets = { left = 11, right = 12, top = 12, bottom = 11 },
     })
 
-    -- Title
+    -- ── Title bar ────────────────────────────────────────────────────────
     local title = win:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
     title:SetPoint("TOPLEFT", 16, -14)
     title:SetText("|cff00ff96Easy|rWishlist")
 
-    -- Close button
     local closeBtn = CreateFrame("Button", nil, win, "UIPanelCloseButton")
     closeBtn:SetPoint("TOPRIGHT", 4, 4)
     closeBtn:SetScript("OnClick", function() win:Hide() end)
 
-    -- Import button
     local importBtn = CreateFrame("Button", nil, win, "UIPanelButtonTemplate")
     importBtn:SetSize(80, 22)
     importBtn:SetPoint("TOPRIGHT", closeBtn, "TOPLEFT", -4, -4)
     importBtn:SetText("Import")
     importBtn:SetScript("OnClick", EWL.OpenImportDialog)
 
-    -- ── Spec selector ─────────────────────────────────────────────────────
-    local specSelector = CreateFrame("Frame", nil, win)
-    specSelector:SetPoint("TOPLEFT", 14, -36)
-    specSelector:SetPoint("TOPRIGHT", -14, -36)
-    specSelector:SetHeight(20)
-    win.specSelector = specSelector
+    -- ── Sidebar ──────────────────────────────────────────────────────────
+    local sidebar = CreateFrame("Frame", nil, win)
+    sidebar:SetPoint("TOPLEFT",    14, -38)
+    sidebar:SetPoint("BOTTOMLEFT", 14,  14)
+    sidebar:SetWidth(SIDEBAR_W)
 
-    local specLabel = specSelector:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    specLabel:SetPoint("LEFT", 0, 0)
-    specLabel:SetText("Spec:")
-    specLabel:SetTextColor(1, 0.82, 0)
+    local sidebarBg = sidebar:CreateTexture(nil, "BACKGROUND")
+    sidebarBg:SetAllPoints()
+    sidebarBg:SetColorTexture(0, 0, 0, 0.12)
 
-    local dropBtn = CreateFrame("Button", nil, specSelector, "UIPanelButtonTemplate")
-    dropBtn:SetSize(120, 20)
-    dropBtn:SetPoint("LEFT", specLabel, "RIGHT", 6, 0)
-    dropBtn:SetText("? v")
-    dropBtn:SetScript("OnClick", function()
-        if specPopup and specPopup:IsShown() then
-            CloseSpecPopup()
+    -- "Selected Wishlist" label
+    local wishlistLabel = sidebar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    wishlistLabel:SetPoint("TOPLEFT", 8, -8)
+    wishlistLabel:SetText("Selected Wishlist")
+    wishlistLabel:SetTextColor(1, 0.82, 0)
+
+    -- Wishlist dropdown button
+    local wishlistDropBtn = CreateFrame("Button", nil, sidebar, "UIPanelButtonTemplate")
+    wishlistDropBtn:SetPoint("TOPLEFT",  8, -24)
+    wishlistDropBtn:SetPoint("TOPRIGHT", -8, -24)
+    wishlistDropBtn:SetHeight(22)
+    wishlistDropBtn:SetText("None v")
+    wishlistDropBtn:SetScript("OnClick", function()
+        if wishlistPopup and wishlistPopup:IsShown() then
+            CloseWishlistPopup()
         else
-            OpenSpecPopup(dropBtn)
+            OpenWishlistPopup(wishlistDropBtn)
         end
     end)
-    specSelector.dropBtn = dropBtn
+    win.wishlistDropBtn = wishlistDropBtn
 
-    local removeBtn = CreateFrame("Button", nil, specSelector, "UIPanelButtonTemplate")
-    removeBtn:SetSize(110, 20)
-    removeBtn:SetPoint("LEFT", dropBtn, "RIGHT", 6, 0)
-    removeBtn:SetText("Remove report")
-    removeBtn:SetScript("OnClick", function()
-        local _, activeSpec = EWL.GetSpecList()
-        if activeSpec then
-            EWL.DeleteSpec(activeSpec)
-            CloseSpecPopup()
-            EWL.RefreshMainWindow()
-        end
-    end)
-    specSelector.removeBtn = removeBtn
+    -- Separator below wishlist selector
+    local sidebarSep = sidebar:CreateTexture(nil, "ARTWORK")
+    sidebarSep:SetPoint("TOPLEFT",  4, -52)
+    sidebarSep:SetPoint("TOPRIGHT", -4, -52)
+    sidebarSep:SetHeight(1)
+    sidebarSep:SetColorTexture(0.4, 0.4, 0.4, 0.5)
 
-    specSelector:Hide()  -- hidden until there are 2+ specs
+    -- "Dungeons" sub-label
+    local dungeonLabel = sidebar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    dungeonLabel:SetPoint("TOPLEFT", 8, -58)
+    dungeonLabel:SetText("Imports")
+    dungeonLabel:SetTextColor(0.5, 0.5, 0.5)
 
-    -- Sim info line
-    local infoLabel = win:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    infoLabel:SetPoint("TOPLEFT", 16, -60)
-    infoLabel:SetPoint("TOPRIGHT", -110, -60)
-    infoLabel:SetJustifyH("LEFT")
-    win.infoLabel = infoLabel
+    -- Dungeon list container
+    local dungeonListFrame = CreateFrame("Frame", nil, sidebar)
+    dungeonListFrame:SetPoint("TOPLEFT",     0, -72)
+    dungeonListFrame:SetPoint("BOTTOMRIGHT", 0,   0)
+    dungeonListFrame:SetHeight(1)
+    win.dungeonListFrame = dungeonListFrame
+    win.dungeonRows = {}
 
-    -- ── Group toggle buttons ──────────────────────────────────────────────
+    -- ── Vertical divider ─────────────────────────────────────────────────
+    local vDivider = win:CreateTexture(nil, "ARTWORK")
+    vDivider:SetWidth(1)
+    vDivider:SetPoint("TOPLEFT",    14 + SIDEBAR_W + 5, -36)
+    vDivider:SetPoint("BOTTOMLEFT", 14 + SIDEBAR_W + 5,  14)
+    vDivider:SetColorTexture(0.35, 0.35, 0.35, 0.7)
+
+    -- ── Right panel ───────────────────────────────────────────────────────
+    local rightPanel = CreateFrame("Frame", nil, win)
+    rightPanel:SetPoint("TOPLEFT",     RP_X, -38)
+    rightPanel:SetPoint("BOTTOMRIGHT", -16,   14)
+    win.rightPanel = rightPanel
+
+    -- Group toggle buttons
     local groupBtns = {}
 
-    local groupLabel = win:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    groupLabel:SetPoint("TOPLEFT", 16, -82)
+    local groupLabel = rightPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    groupLabel:SetPoint("TOPLEFT", 14, -6)
     groupLabel:SetText("Group:")
     groupLabel:SetTextColor(0.5, 0.5, 0.5)
 
     local function MakeGroupBtn(label, mode, xLeft)
-        local btn = CreateFrame("Button", nil, win)
+        local btn = CreateFrame("Button", nil, rightPanel)
         btn:SetSize(72, 18)
-        btn:SetPoint("TOPLEFT", win, "TOPLEFT", xLeft, -80)
+        btn:SetPoint("TOPLEFT", rightPanel, "TOPLEFT", xLeft, -4)
 
         local bg = btn:CreateTexture(nil, "BACKGROUND")
         bg:SetAllPoints()
@@ -773,28 +954,32 @@ local function CreateMainWindow()
     MakeGroupBtn("By Slot",   "slot",   146)
 
     -- Divider
-    local divider = win:CreateTexture(nil, "ARTWORK")
-    divider:SetPoint("TOPLEFT", 14, -104)
-    divider:SetPoint("TOPRIGHT", -14, -104)
-    divider:SetHeight(1)
-    divider:SetColorTexture(0.4, 0.4, 0.4, 0.6)
+    local rpDivider = rightPanel:CreateTexture(nil, "ARTWORK")
+    rpDivider:SetPoint("TOPLEFT",  14, -28)
+    rpDivider:SetPoint("TOPRIGHT", -6, -28)
+    rpDivider:SetHeight(1)
+    rpDivider:SetColorTexture(0.4, 0.4, 0.4, 0.6)
 
     -- Column headers
-    local headerFrame = CreateFrame("Frame", nil, win)
-    headerFrame:SetPoint("TOPLEFT", 14, -108)
-    headerFrame:SetPoint("TOPRIGHT", -14, -108)
+    local headerFrame = CreateFrame("Frame", nil, rightPanel)
+    headerFrame:SetPoint("TOPLEFT",  14, -32)
+    headerFrame:SetPoint("TOPRIGHT", -6, -32)
     headerFrame:SetHeight(20)
     CreateHeaders(headerFrame)
 
     -- Scroll frame
-    local scrollFrame = CreateFrame("ScrollFrame", nil, win, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", 14, -132)
-    scrollFrame:SetPoint("BOTTOMRIGHT", -30, 14)
+    local scrollFrame = CreateFrame("ScrollFrame", nil, rightPanel, "UIPanelScrollFrameTemplate")
+    scrollFrame:SetPoint("TOPLEFT",     14, -56)
+    scrollFrame:SetPoint("BOTTOMRIGHT", -6,   0)
 
     local scrollChild = CreateFrame("Frame", nil, scrollFrame)
     scrollChild:SetWidth(scrollFrame:GetWidth())
     scrollChild:SetHeight(1)
     scrollFrame:SetScrollChild(scrollChild)
+
+    -- Store references for ShowEmptyState and RefreshSidebar
+    scrollChild.mainWin    = win
+    scrollChild.rightPanel = rightPanel
 
     win.scrollChild = scrollChild
     win.scrollFrame = scrollFrame
@@ -802,12 +987,12 @@ local function CreateMainWindow()
     tinsert(UISpecialFrames, "EWLMainWindow")
 
     win:SetScript("OnShow", function()
-        UpdateHeader(win)
+        RefreshSidebar()
         RefreshList(scrollChild)
     end)
 
     win:SetScript("OnHide", function()
-        CloseSpecPopup()
+        CloseWishlistPopup()
     end)
 
     win:Hide()
@@ -827,7 +1012,7 @@ end
 
 function EWL.RefreshMainWindow()
     if mainWindow and mainWindow:IsShown() then
-        UpdateHeader(mainWindow)
+        RefreshSidebar()
         if mainWindow.scrollChild then RefreshList(mainWindow.scrollChild) end
     end
 end
@@ -835,7 +1020,6 @@ end
 -- ─── Global item tooltip hook ────────────────────────────────────────────
 
 GameTooltip:HookScript("OnTooltipSetItem", function(tooltip)
-    -- Skip addon rows — they already inject upgrade info in their OnEnter handler
     local owner = tooltip:GetOwner()
     if owner and owner.result then return end
 
@@ -868,13 +1052,11 @@ itemEventFrame:SetScript("OnEvent", function(self, event, itemID, success)
 
     pendingItems[itemID] = nil
 
-    -- Slot grouping: if the slot wasn't cached yet, re-render to place item correctly
     if groupMode == "slot" and not slotCache[itemID] then
         RefreshList(mainWindow.scrollChild)
         return
     end
 
-    -- Otherwise just repaint the affected rows
     for _, row in ipairs(activeRows) do
         if row.itemID == itemID then
             PopulateRow(row, row.result, row.rank, row.isEven)

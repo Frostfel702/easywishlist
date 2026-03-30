@@ -1,11 +1,11 @@
 -- EasyWishlist - Import.lua
--- Import dialog: paste QE JSON, validate, save
+-- Import dialog: paste QE JSON, pick wishlist name, validate, save
 
 local importDialog
 
 local function CreateImportDialog()
     local dialog = CreateFrame("Frame", "EWLImportDialog", UIParent, "BackdropTemplate")
-    dialog:SetSize(520, 380)
+    dialog:SetSize(520, 420)
     dialog:SetPoint("CENTER")
     dialog:SetFrameStrata("DIALOG")
     dialog:SetMovable(true)
@@ -32,10 +32,28 @@ local function CreateImportDialog()
     instructions:SetText("Paste your EasyWishlist import string below:")
     instructions:SetTextColor(0.8, 0.8, 0.8)
 
+    -- ── Wishlist name field ───────────────────────────────────────────────
+    local wishlistLabel = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    wishlistLabel:SetPoint("TOPLEFT", 20, -68)
+    wishlistLabel:SetText("Save to wishlist:")
+    wishlistLabel:SetTextColor(1, 0.82, 0)
+
+    local wishlistInput = CreateFrame("EditBox", nil, dialog, "InputBoxTemplate")
+    wishlistInput:SetPoint("TOPLEFT",  20, -84)
+    wishlistInput:SetPoint("TOPRIGHT", -20, -84)
+    wishlistInput:SetHeight(22)
+    wishlistInput:SetAutoFocus(false)
+    wishlistInput:SetMaxLetters(64)
+    wishlistInput:SetScript("OnEscapePressed", function() dialog:Hide() end)
+    wishlistInput:SetScript("OnTextChanged", function()
+        dialog.errorLabel:SetText("")
+    end)
+    dialog.wishlistInput = wishlistInput
+
     -- EditBox scroll frame
     local scrollFrame = CreateFrame("ScrollFrame", nil, dialog, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", 20, -70)
-    scrollFrame:SetPoint("BOTTOMRIGHT", -36, 60)
+    scrollFrame:SetPoint("TOPLEFT",     20, -114)
+    scrollFrame:SetPoint("BOTTOMRIGHT", -36,  60)
 
     local editBox = CreateFrame("EditBox", nil, scrollFrame)
     editBox:SetMultiLine(true)
@@ -43,7 +61,7 @@ local function CreateImportDialog()
     editBox:SetFontObject(ChatFontNormal)
     editBox:SetWidth(scrollFrame:GetWidth())
     editBox:SetScript("OnEscapePressed", function() dialog:Hide() end)
-    editBox:SetScript("OnTextChanged", function(self)
+    editBox:SetScript("OnTextChanged", function()
         dialog.errorLabel:SetText("")
     end)
     scrollFrame:SetScrollChild(editBox)
@@ -55,7 +73,7 @@ local function CreateImportDialog()
 
     -- Error label
     local errorLabel = dialog:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    errorLabel:SetPoint("BOTTOMLEFT", 20, 38)
+    errorLabel:SetPoint("BOTTOMLEFT",  20, 38)
     errorLabel:SetPoint("BOTTOMRIGHT", -20, 38)
     errorLabel:SetTextColor(1, 0.3, 0.3)
     errorLabel:SetJustifyH("LEFT")
@@ -68,6 +86,14 @@ local function CreateImportDialog()
     importBtn:SetPoint("BOTTOMRIGHT", -20, 14)
     importBtn:SetText("Import")
     importBtn:SetScript("OnClick", function()
+        local wishlistName = wishlistInput:GetText()
+        if not wishlistName or wishlistName:match("^%s*$") then
+            errorLabel:SetText("Please enter a wishlist name.")
+            wishlistInput:SetFocus()
+            return
+        end
+        wishlistName = wishlistName:match("^%s*(.-)%s*$")  -- trim whitespace
+
         local text = editBox:GetText()
         if not text or text:match("^%s*$") then
             errorLabel:SetText("Please paste an import string first.")
@@ -85,7 +111,7 @@ local function CreateImportDialog()
             data = EWL.NormalizeRaidbots(data)
         end
 
-        local ok, saveErr = EWL.SaveReport(data)
+        local ok, saveErr = EWL.SaveReport(data, wishlistName)
         if not ok then
             errorLabel:SetText("Import failed: " .. (saveErr or "unknown error"))
             return
@@ -94,7 +120,7 @@ local function CreateImportDialog()
         editBox:SetText("")
         dialog:Hide()
         EWL.RefreshMainWindow()
-        print("|cff00ff96EasyWishlist:|r Merged into " .. (data.spec or "unknown spec") .. " report.")
+        print("|cff00ff96EasyWishlist:|r Merged into wishlist \"" .. wishlistName .. "\".")
     end)
 
     -- Cancel button
@@ -120,6 +146,15 @@ function EWL.OpenImportDialog()
         importDialog = CreateImportDialog()
     end
     importDialog.errorLabel:SetText("")
+
+    -- Pre-fill wishlist name with the currently active wishlist
+    local _, activeWishlist = EWL.GetWishlists()
+    if activeWishlist then
+        importDialog.wishlistInput:SetText(activeWishlist)
+    else
+        importDialog.wishlistInput:SetText("")
+    end
+
     importDialog:Show()
     importDialog.editBox:SetFocus()
 end
