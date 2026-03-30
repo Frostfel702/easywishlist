@@ -683,6 +683,31 @@ function EWL.RefreshMainWindow()
     end
 end
 
+-- ─── Global item tooltip hook ────────────────────────────────────────────
+
+GameTooltip:HookScript("OnTooltipSetItem", function(tooltip)
+    -- Skip addon rows — they already inject upgrade info in their OnEnter handler
+    local owner = tooltip:GetOwner()
+    if owner and owner.result then return end
+
+    local _, link = tooltip:GetItem()
+    if not link then return end
+    local itemID = tonumber(link:match("item:(%d+)"))
+    if not itemID then return end
+
+    local pct = EWL.GetItemUpgrade(itemID)
+    if not pct then return end
+
+    local r, g, b = PctColor(pct)
+    tooltip:AddLine(" ")
+    tooltip:AddDoubleLine(
+        "|cff00ff96EWL|r Upgrade:",
+        string.format("+%.2f%%", pct),
+        r, g, b, r, g, b
+    )
+    tooltip:Show()
+end)
+
 -- ─── ITEM_DATA_LOAD_RESULT ───────────────────────────────────────────────
 
 local itemEventFrame = CreateFrame("Frame")
