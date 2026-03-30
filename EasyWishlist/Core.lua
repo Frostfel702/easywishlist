@@ -24,20 +24,97 @@ end
 function EWL.GetCharacterKey()
     local name = UnitName("player") or "Unknown"
     local realm = GetRealmName() or "Unknown"
-    -- Normalize realm: remove spaces and hyphens for consistency
     realm = realm:gsub("[%s%-]", "")
     return name .. "-" .. realm
+end
+
+-- ─── Migration ────────────────────────────────────────────────────────────
+
+-- Handles both old formats:
+--   v1: reports[key] = { results, spec, ... }       (single report directly)
+--   v2: reports[key] = { activeIndex, list = {...} } (previous multi-report attempt)
+-- Both are migrated into v3: { activeSpec, bySpec = { [spec] = { spec, lastUpdated, results } } }
+local function MigrateIfNeeded(key)
+    local data = EasyWishlistDB.reports[key]
+    if not data then return end
+    if data.bySpec then return end  -- already v3
+
+    local report
+    if data.results then
+        -- v1
+        report = data
+    elseif data.list and data.list[1] then
+        -- v2: use the active entry or first
+        report = data.list[data.activeIndex or 1]
+    end
+
+    if report and report.spec then
+        local spec = report.spec
+        EasyWishlistDB.reports[key] = {
+            activeSpec = spec,
+            bySpec = {
+                [spec] = {
+                    spec        = spec,
+                    lastUpdated = report.dateCreated or "",
+                    results     = report.results or {},
+                }
+            }
+        }
+    else
+        EasyWishlistDB.reports[key] = nil
+    end
 end
 
 -- ─── Data Access ──────────────────────────────────────────────────────────
 
 function EWL.GetCurrentReport()
     local key = EWL.GetCharacterKey()
-    return EasyWishlistDB.reports[key]
+    MigrateIfNeeded(key)
+    local wrapper = EasyWishlistDB.reports[key]
+    if not wrapper or not wrapper.activeSpec then return nil end
+    return wrapper.bySpec[wrapper.activeSpec]
+end
+
+-- Returns sorted list of spec names and the currently active spec name.
+function EWL.GetSpecList()
+    local key = EWL.GetCharacterKey()
+    MigrateIfNeeded(key)
+    local wrapper = EasyWishlistDB.reports[key]
+    if not wrapper or not wrapper.bySpec then return {}, nil end
+    local specs = {}
+    for specName in pairs(wrapper.bySpec) do
+        specs[#specs + 1] = specName
+    end
+    table.sort(specs)
+    return specs, wrapper.activeSpec
+end
+
+function EWL.SetActiveSpec(spec)
+    local key = EWL.GetCharacterKey()
+    MigrateIfNeeded(key)
+    local wrapper = EasyWishlistDB.reports[key]
+    if not wrapper or not wrapper.bySpec[spec] then return end
+    wrapper.activeSpec = spec
+end
+
+function EWL.DeleteSpec(spec)
+    local key = EWL.GetCharacterKey()
+    MigrateIfNeeded(key)
+    local wrapper = EasyWishlistDB.reports[key]
+    if not wrapper or not wrapper.bySpec then return end
+    local count = 0
+    for _ in pairs(wrapper.bySpec) do count = count + 1 end
+    if count <= 1 then return end
+    wrapper.bySpec[spec] = nil
+    if wrapper.activeSpec == spec then
+        local remaining = {}
+        for s in pairs(wrapper.bySpec) do remaining[#remaining + 1] = s end
+        table.sort(remaining)
+        wrapper.activeSpec = remaining[1]
+    end
 end
 
 function EWL.SaveReport(data)
-    -- Validate required fields
     if not data.results or type(data.results) ~= "table" then
         return false, "Missing or invalid 'results' field"
     end
@@ -47,7 +124,6 @@ function EWL.SaveReport(data)
     if not data.playername then
         return false, "Missing 'playername' field"
     end
-    -- realm is optional (Raidbots exports don't include it)
     if data.realm == nil then
         data.realm = ""
     end
@@ -55,31 +131,93 @@ function EWL.SaveReport(data)
         return false, "Results list is empty"
     end
 
-    -- Filter out zero-score items and sort descending by percDiff
-    local results = {}
+    -- Filter zero-or-negative upgrades
+    local newResults = {}
     for _, r in ipairs(data.results) do
         if r.percDiff and r.percDiff > 0 and r.item then
-            results[#results + 1] = r
+            newResults[#newResults + 1] = r
         end
     end
-    table.sort(results, function(a, b)
+
+    local spec = data.spec
+    local key  = EWL.GetCharacterKey()
+    MigrateIfNeeded(key)
+
+    local wrapper = EasyWishlistDB.reports[key]
+    if not wrapper then
+        wrapper = { activeSpec = spec, bySpec = {} }
+        EasyWishlistDB.reports[key] = wrapper
+    end
+
+    -- Get or create spec bucket
+    if not wrapper.bySpec[spec] then
+        wrapper.bySpec[spec] = { spec = spec, lastUpdated = "", results = {} }
+    end
+    local bucket = wrapper.bySpec[spec]
+
+    -- Collect the set of sourceIds and item IDs present in the incoming data
+    local incomingSourceIds = {}
+    local incomingItemIds   = {}
+    for _, r in ipairs(newResults) do
+        if r.sourceId then
+            incomingSourceIds[r.sourceId] = true
+        end
+        incomingItemIds[r.item] = true
+    end
+
+    if next(incomingSourceIds) then
+        -- Source-replacement: drop existing items that match an incoming sourceId OR an
+        -- incoming itemID (the itemID check handles old-format items that have no sourceId).
+        local kept = {}
+        for _, r in ipairs(bucket.results) do
+            local drop = (r.sourceId and incomingSourceIds[r.sourceId]) or incomingItemIds[r.item]
+            if not drop then
+                kept[#kept + 1] = r
+            end
+        end
+        for _, r in ipairs(newResults) do
+            kept[#kept + 1] = r
+        end
+        bucket.results = kept
+    else
+        -- Legacy merge: update existing item by itemID or append
+        local byItemID = {}
+        for i, r in ipairs(bucket.results) do
+            byItemID[r.item] = i
+        end
+        for _, r in ipairs(newResults) do
+            local idx = byItemID[r.item]
+            if idx then
+                bucket.results[idx] = r
+            else
+                bucket.results[#bucket.results + 1] = r
+                byItemID[r.item] = #bucket.results
+            end
+        end
+    end
+
+    -- Re-sort descending by percDiff
+    table.sort(bucket.results, function(a, b)
         return (a.percDiff or 0) > (b.percDiff or 0)
     end)
 
-    local key = EWL.GetCharacterKey()
-    EasyWishlistDB.reports[key] = {
-        id          = data.id,
-        dateCreated = data.dateCreated,
-        playername  = data.playername,
-        realm       = data.realm,
-        spec        = data.spec,
-        contentType = data.contentType,
-        ufSettings  = data.ufSettings,
-        gameType    = data.gameType,
-        results     = results,
-    }
+    bucket.lastUpdated = data.dateCreated or ""
+    wrapper.activeSpec  = spec
 
     return true
+end
+
+-- ─── Item Upgrade Lookup ──────────────────────────────────────────────────
+
+function EWL.GetItemUpgrade(itemID)
+    local report = EWL.GetCurrentReport()
+    if not report or not report.results then return nil end
+    for _, r in ipairs(report.results) do
+        if r.item == itemID then
+            return r.percDiff
+        end
+    end
+    return nil
 end
 
 -- ─── Difficulty Label ─────────────────────────────────────────────────────

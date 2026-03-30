@@ -44,7 +44,6 @@ local function CreateImportDialog()
     editBox:SetWidth(scrollFrame:GetWidth())
     editBox:SetScript("OnEscapePressed", function() dialog:Hide() end)
     editBox:SetScript("OnTextChanged", function(self)
-        -- Clear error when user starts editing
         dialog.errorLabel:SetText("")
     end)
     scrollFrame:SetScrollChild(editBox)
@@ -95,7 +94,7 @@ local function CreateImportDialog()
         editBox:SetText("")
         dialog:Hide()
         EWL.RefreshMainWindow()
-        print("|cff00ff96EasyWishlist:|r Report imported successfully for " .. (data.spec or "unknown spec") .. ".")
+        print("|cff00ff96EasyWishlist:|r Merged into " .. (data.spec or "unknown spec") .. " report.")
     end)
 
     -- Cancel button
@@ -109,7 +108,6 @@ local function CreateImportDialog()
         dialog:Hide()
     end)
 
-    -- Close on Escape via UISpecialFrames
     tinsert(UISpecialFrames, "EWLImportDialog")
 
     dialog.editBox = editBox

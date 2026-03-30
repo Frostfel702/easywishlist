@@ -2,7 +2,7 @@
 -- Main window: header, scrolling item list, tooltips
 
 local WINDOW_W  = 540
-local WINDOW_H  = 440   -- slightly taller to fit group buttons
+local WINDOW_H  = 464   -- extra height for report nav bar
 local ROW_H     = 32
 local HEADER_H  = 22
 local ICON_SIZE = 24
@@ -255,7 +255,7 @@ local function PopulateRow(row, result, rank, isEven)
 
     local locLabel = result.sourceName or result.dropLoc or "?"
     local diffLabel = ""
-    if result.dropLoc == "Dungeon" then
+    if result.dropLoc == "Dungeon" and locLabel ~= "Mythic+" then
         diffLabel = " Mythic+"
     elseif result.dropLoc == "Raid" and result.dropDifficulty then
         local diffNames = { [0]="LFR",[1]="LFR",[2]="Normal",[3]="Normal",[4]="Heroic",[5]="Heroic",[6]="Mythic",[7]="Mythic" }
@@ -268,7 +268,7 @@ end
 
 local function SourceKey(result)
     local name = result.sourceName or result.dropLoc or "Unknown"
-    if result.dropLoc == "Dungeon" then
+    if result.dropLoc == "Dungeon" and name ~= "Mythic+" then
         return name .. " Mythic+"
     elseif result.dropLoc == "Raid" and result.dropDifficulty then
         local diffNames = { [0]="LFR",[1]="LFR",[2]="Normal",[3]="Normal",[4]="Heroic",[5]="Heroic",[6]="Mythic",[7]="Mythic" }
@@ -355,7 +355,7 @@ local function ShowEmptyState(contentFrame, show)
         -- interactive elements (buttons, editboxes) receive mouse events correctly.
         local win = contentFrame:GetParent():GetParent()
         local f = CreateFrame("Frame", nil, win)
-        f:SetPoint("TOPLEFT", win, "TOPLEFT", 14, -108)
+        f:SetPoint("TOPLEFT", win, "TOPLEFT", 14, -132)
         f:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -30, 14)
         f:SetFrameStrata("MEDIUM")
         contentFrame.tutorialFrame = f
@@ -518,17 +518,121 @@ function EWL.OpenUrlDialog()
     urlDialog:Show()
 end
 
--- ─────────────────────────────────────────────────────────────────────────────
+-- ─── Spec selector helpers ────────────────────────────────────────────────
 
-local function UpdateHeader(infoLabel)
+local specPopup
+
+local function ShortSpecName(fullSpec)
+    return (fullSpec:match("^(%S+)") or fullSpec)
+end
+
+local function CloseSpecPopup()
+    if specPopup then specPopup:Hide() end
+end
+
+local function OpenSpecPopup(anchor)
+    local specs, activeSpec = EWL.GetSpecList()
+
+    if not specPopup then
+        specPopup = CreateFrame("Frame", "EWLSpecPopup", UIParent, "BackdropTemplate")
+        specPopup:SetFrameStrata("TOOLTIP")
+        specPopup:SetBackdrop({
+            bgFile   = "Interface\\DialogFrame\\UI-DialogBox-Background",
+            edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+            tile = true, tileSize = 32, edgeSize = 16,
+            insets = { left = 4, right = 4, top = 4, bottom = 4 },
+        })
+        specPopup.rows = {}
+    end
+
+    -- Hide/recycle existing rows
+    for _, r in ipairs(specPopup.rows) do r:Hide() end
+    wipe(specPopup.rows)
+
+    local ROW_H = 22
+    local PAD   = 8
+    local WIDTH = 130
+    local yOff  = -PAD
+
+    for _, spec in ipairs(specs) do
+        local row = CreateFrame("Button", nil, specPopup)
+        row:SetHeight(ROW_H)
+        row:SetPoint("TOPLEFT",  PAD, yOff)
+        row:SetPoint("TOPRIGHT", -PAD, yOff)
+
+        local hl = row:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints()
+        hl:SetColorTexture(1, 1, 1, 0.08)
+
+        local dot = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        dot:SetPoint("LEFT", 0, 0)
+        dot:SetWidth(14)
+        dot:SetJustifyH("CENTER")
+
+        local lbl = row:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        lbl:SetPoint("LEFT", 14, 0)
+        lbl:SetJustifyH("LEFT")
+        lbl:SetText(ShortSpecName(spec))
+
+        if spec == activeSpec then
+            dot:SetText("|cff00ff96●|r")
+            lbl:SetTextColor(1, 1, 1)
+        else
+            dot:SetText("")
+            lbl:SetTextColor(0.7, 0.7, 0.7)
+        end
+
+        local capturedSpec = spec
+        row:SetScript("OnClick", function()
+            EWL.SetActiveSpec(capturedSpec)
+            CloseSpecPopup()
+            EWL.RefreshMainWindow()
+        end)
+
+        row:Show()
+        specPopup.rows[#specPopup.rows + 1] = row
+        yOff = yOff - ROW_H
+    end
+
+    local totalH = PAD * 2 + #specs * ROW_H
+    specPopup:SetSize(WIDTH, totalH)
+    specPopup:ClearAllPoints()
+    specPopup:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -2)
+    specPopup:Show()
+end
+
+-- ─── Header / spec selector update ───────────────────────────────────────
+
+local function UpdateSpecSelector(win)
+    if not win.specSelector then return end
+    local specs, activeSpec = EWL.GetSpecList()
+    local total = #specs
+    local ss = win.specSelector
+
+    if total <= 1 then
+        ss:Hide()
+        CloseSpecPopup()
+        return
+    end
+
+    ss:Show()
+    local shortName = activeSpec and ShortSpecName(activeSpec) or "?"
+    ss.dropBtn:SetText(shortName .. " v")
+    ss.removeBtn:SetShown(total > 1)
+end
+
+local function UpdateHeader(win)
+    local infoLabel = win.infoLabel
     local report = EWL.GetCurrentReport()
-    if not report then infoLabel:SetText(""); return end
-    local diffLabel = EWL.GetDifficultyLabel(report)
-    local text = string.format("|cffffd700%s|r  %s  |cff888888%s|r",
-        report.spec or "?",
-        report.contentType and (report.contentType .. (diffLabel ~= "" and (" " .. diffLabel) or "")) or "?",
-        report.dateCreated or "")
-    infoLabel:SetText(text)
+    if not report then
+        infoLabel:SetText("")
+    else
+        local text = string.format("|cffffd700%s|r  |cff888888Last updated: %s|r",
+            report.spec or "?",
+            report.lastUpdated or "")
+        infoLabel:SetText(text)
+    end
+    UpdateSpecSelector(win)
 end
 
 -- ─── Main window ─────────────────────────────────────────────────────────
@@ -568,10 +672,51 @@ local function CreateMainWindow()
     importBtn:SetText("Import")
     importBtn:SetScript("OnClick", EWL.OpenImportDialog)
 
+    -- ── Spec selector ─────────────────────────────────────────────────────
+    local specSelector = CreateFrame("Frame", nil, win)
+    specSelector:SetPoint("TOPLEFT", 14, -36)
+    specSelector:SetPoint("TOPRIGHT", -14, -36)
+    specSelector:SetHeight(20)
+    win.specSelector = specSelector
+
+    local specLabel = specSelector:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    specLabel:SetPoint("LEFT", 0, 0)
+    specLabel:SetText("Spec:")
+    specLabel:SetTextColor(1, 0.82, 0)
+
+    local dropBtn = CreateFrame("Button", nil, specSelector, "UIPanelButtonTemplate")
+    dropBtn:SetSize(120, 20)
+    dropBtn:SetPoint("LEFT", specLabel, "RIGHT", 6, 0)
+    dropBtn:SetText("? v")
+    dropBtn:SetScript("OnClick", function()
+        if specPopup and specPopup:IsShown() then
+            CloseSpecPopup()
+        else
+            OpenSpecPopup(dropBtn)
+        end
+    end)
+    specSelector.dropBtn = dropBtn
+
+    local removeBtn = CreateFrame("Button", nil, specSelector, "UIPanelButtonTemplate")
+    removeBtn:SetSize(110, 20)
+    removeBtn:SetPoint("LEFT", dropBtn, "RIGHT", 6, 0)
+    removeBtn:SetText("Remove report")
+    removeBtn:SetScript("OnClick", function()
+        local _, activeSpec = EWL.GetSpecList()
+        if activeSpec then
+            EWL.DeleteSpec(activeSpec)
+            CloseSpecPopup()
+            EWL.RefreshMainWindow()
+        end
+    end)
+    specSelector.removeBtn = removeBtn
+
+    specSelector:Hide()  -- hidden until there are 2+ specs
+
     -- Sim info line
     local infoLabel = win:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    infoLabel:SetPoint("TOPLEFT", 16, -38)
-    infoLabel:SetPoint("TOPRIGHT", -110, -38)
+    infoLabel:SetPoint("TOPLEFT", 16, -60)
+    infoLabel:SetPoint("TOPRIGHT", -110, -60)
     infoLabel:SetJustifyH("LEFT")
     win.infoLabel = infoLabel
 
@@ -579,14 +724,14 @@ local function CreateMainWindow()
     local groupBtns = {}
 
     local groupLabel = win:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-    groupLabel:SetPoint("TOPLEFT", 16, -60)
+    groupLabel:SetPoint("TOPLEFT", 16, -82)
     groupLabel:SetText("Group:")
     groupLabel:SetTextColor(0.5, 0.5, 0.5)
 
     local function MakeGroupBtn(label, mode, xLeft)
         local btn = CreateFrame("Button", nil, win)
         btn:SetSize(72, 18)
-        btn:SetPoint("TOPLEFT", win, "TOPLEFT", xLeft, -58)
+        btn:SetPoint("TOPLEFT", win, "TOPLEFT", xLeft, -80)
 
         local bg = btn:CreateTexture(nil, "BACKGROUND")
         bg:SetAllPoints()
@@ -629,21 +774,21 @@ local function CreateMainWindow()
 
     -- Divider
     local divider = win:CreateTexture(nil, "ARTWORK")
-    divider:SetPoint("TOPLEFT", 14, -80)
-    divider:SetPoint("TOPRIGHT", -14, -80)
+    divider:SetPoint("TOPLEFT", 14, -104)
+    divider:SetPoint("TOPRIGHT", -14, -104)
     divider:SetHeight(1)
     divider:SetColorTexture(0.4, 0.4, 0.4, 0.6)
 
     -- Column headers
     local headerFrame = CreateFrame("Frame", nil, win)
-    headerFrame:SetPoint("TOPLEFT", 14, -84)
-    headerFrame:SetPoint("TOPRIGHT", -14, -84)
+    headerFrame:SetPoint("TOPLEFT", 14, -108)
+    headerFrame:SetPoint("TOPRIGHT", -14, -108)
     headerFrame:SetHeight(20)
     CreateHeaders(headerFrame)
 
     -- Scroll frame
     local scrollFrame = CreateFrame("ScrollFrame", nil, win, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT", 14, -108)
+    scrollFrame:SetPoint("TOPLEFT", 14, -132)
     scrollFrame:SetPoint("BOTTOMRIGHT", -30, 14)
 
     local scrollChild = CreateFrame("Frame", nil, scrollFrame)
@@ -657,8 +802,12 @@ local function CreateMainWindow()
     tinsert(UISpecialFrames, "EWLMainWindow")
 
     win:SetScript("OnShow", function()
-        UpdateHeader(win.infoLabel)
+        UpdateHeader(win)
         RefreshList(scrollChild)
+    end)
+
+    win:SetScript("OnHide", function()
+        CloseSpecPopup()
     end)
 
     win:Hide()
@@ -678,7 +827,7 @@ end
 
 function EWL.RefreshMainWindow()
     if mainWindow and mainWindow:IsShown() then
-        if mainWindow.infoLabel then UpdateHeader(mainWindow.infoLabel) end
+        UpdateHeader(mainWindow)
         if mainWindow.scrollChild then RefreshList(mainWindow.scrollChild) end
     end
 end
