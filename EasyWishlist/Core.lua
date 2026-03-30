@@ -40,14 +40,21 @@ local function MigrateIfNeeded(key)
     if not data then return end
     if data.byWishlist then return end  -- already v4
 
-    -- v3 → v4: rename bySpec to byWishlist
+    -- v3 → v4: rename bySpec to byWishlist, backfill dungeonImports from results
     if data.bySpec then
         local byWishlist = {}
         for specName, bucket in pairs(data.bySpec) do
+            local dungeonImports = {}
+            for _, r in ipairs(bucket.results or {}) do
+                local src = r.sourceName or r.dropLoc or "Unknown"
+                if not dungeonImports[src] then
+                    dungeonImports[src] = bucket.lastUpdated or ""
+                end
+            end
             byWishlist[specName] = {
                 lastUpdated    = bucket.lastUpdated or "",
                 results        = bucket.results or {},
-                dungeonImports = {},
+                dungeonImports = dungeonImports,
             }
         end
         EasyWishlistDB.reports[key] = {
@@ -67,13 +74,20 @@ local function MigrateIfNeeded(key)
 
     if report and report.spec then
         local spec = report.spec
+        local dungeonImports = {}
+        for _, r in ipairs(report.results or {}) do
+            local src = r.sourceName or r.dropLoc or "Unknown"
+            if not dungeonImports[src] then
+                dungeonImports[src] = report.dateCreated or ""
+            end
+        end
         EasyWishlistDB.reports[key] = {
             activeWishlist = spec,
             byWishlist = {
                 [spec] = {
                     lastUpdated    = report.dateCreated or "",
                     results        = report.results or {},
-                    dungeonImports = {},
+                    dungeonImports = dungeonImports,
                 }
             }
         }
@@ -132,12 +146,27 @@ function EWL.DeleteWishlist(name)
 end
 
 -- Returns sorted list of {name, lastUpdated} for dungeons imported into the current wishlist.
+-- Also lazily backfills dungeonImports for reports migrated before this field existed.
 function EWL.GetDungeonList()
     local report = EWL.GetCurrentReport()
     if not report then return {} end
-    local imports = report.dungeonImports or {}
+
+    if not report.dungeonImports then
+        report.dungeonImports = {}
+    end
+
+    -- Backfill: if dungeonImports is empty but results exist, derive entries from results
+    if not next(report.dungeonImports) and report.results and #report.results > 0 then
+        for _, r in ipairs(report.results) do
+            local src = r.sourceName or r.dropLoc or "Unknown"
+            if not report.dungeonImports[src] then
+                report.dungeonImports[src] = report.lastUpdated or ""
+            end
+        end
+    end
+
     local list = {}
-    for name, date in pairs(imports) do
+    for name, date in pairs(report.dungeonImports) do
         list[#list + 1] = { name = name, lastUpdated = date }
     end
     table.sort(list, function(a, b) return a.name < b.name end)
