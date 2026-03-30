@@ -675,6 +675,28 @@ local function RefreshSidebar()
         end
     end
 
+    -- Update "All Sources" pinned row
+    if win.allSourcesRow then
+        local report     = EWL.GetCurrentReport()
+        local totalCount = report and report.results and #report.results or 0
+        local isAll      = (dungeonFilter == nil)
+        if isAll then
+            win.allSourcesRow.bg:SetColorTexture(1, 0.82, 0, 0.10)
+            win.allSourcesRow.bar:Show()
+            win.allSourcesRow.nameText:SetTextColor(1, 0.9, 0.4)
+        else
+            win.allSourcesRow.bg:SetColorTexture(0, 0, 0, 0)
+            win.allSourcesRow.bar:Hide()
+            win.allSourcesRow.nameText:SetTextColor(0.85, 0.85, 0.85)
+        end
+        win.allSourcesRow.countText:SetText("|cff666666" .. totalCount .. "|r")
+        win.allSourcesRow:SetScript("OnClick", function()
+            dungeonFilter = nil
+            RefreshSidebar()
+            RefreshList(win.scrollChild)
+        end)
+    end
+
     -- Rebuild dungeon rows
     local dungeons   = EWL.GetDungeonList()
     local listFrame  = win.dungeonListFrame
@@ -874,18 +896,69 @@ local function CreateMainWindow()
     sidebarSep:SetHeight(1)
     sidebarSep:SetColorTexture(0.4, 0.4, 0.4, 0.5)
 
-    -- "Dungeons" sub-label
+    -- "Imports" sub-label
     local dungeonLabel = sidebar:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     dungeonLabel:SetPoint("TOPLEFT", 8, -58)
     dungeonLabel:SetText("Imports")
     dungeonLabel:SetTextColor(0.5, 0.5, 0.5)
 
-    -- Dungeon list container
-    local dungeonListFrame = CreateFrame("Frame", nil, sidebar)
-    dungeonListFrame:SetPoint("TOPLEFT",     0, -72)
-    dungeonListFrame:SetPoint("BOTTOMRIGHT", 0,   0)
+    -- "All Sources" pinned row (always visible, not scrolled)
+    local allSourcesRow = CreateFrame("Button", nil, sidebar)
+    allSourcesRow:SetPoint("TOPLEFT",  0, -70)
+    allSourcesRow:SetPoint("TOPRIGHT", 0, -70)
+    allSourcesRow:SetHeight(DROW_H)
+
+    local asBg = allSourcesRow:CreateTexture(nil, "BACKGROUND")
+    asBg:SetAllPoints()
+    allSourcesRow.bg = asBg
+
+    local asHl = allSourcesRow:CreateTexture(nil, "HIGHLIGHT")
+    asHl:SetAllPoints()
+    asHl:SetColorTexture(1, 1, 1, 0.06)
+
+    local asBar = allSourcesRow:CreateTexture(nil, "ARTWORK")
+    asBar:SetWidth(2)
+    asBar:SetPoint("TOPLEFT", 0, 0)
+    asBar:SetPoint("BOTTOMLEFT", 0, 0)
+    asBar:SetColorTexture(1, 0.82, 0, 0.9)
+    allSourcesRow.bar = asBar
+
+    local asName = allSourcesRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    asName:SetPoint("TOPLEFT", 8, -5)
+    asName:SetJustifyH("LEFT")
+    asName:SetText("All Sources")
+    allSourcesRow.nameText = asName
+
+    local asCount = allSourcesRow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    asCount:SetPoint("TOPRIGHT", -6, -5)
+    asCount:SetJustifyH("RIGHT")
+    allSourcesRow.countText = asCount
+
+    local asSep = allSourcesRow:CreateTexture(nil, "ARTWORK")
+    asSep:SetPoint("BOTTOMLEFT",  2, 0)
+    asSep:SetPoint("BOTTOMRIGHT", -2, 0)
+    asSep:SetHeight(1)
+    asSep:SetColorTexture(0.3, 0.3, 0.3, 0.4)
+
+    win.allSourcesRow = allSourcesRow
+
+    -- Scrollable dungeon list below "All Sources"
+    local dungeonScrollFrame = CreateFrame("ScrollFrame", nil, sidebar)
+    dungeonScrollFrame:SetPoint("TOPLEFT",     0, -(70 + DROW_H))
+    dungeonScrollFrame:SetPoint("BOTTOMRIGHT", 0,  0)
+    dungeonScrollFrame:EnableMouseWheel(true)
+    dungeonScrollFrame:SetScript("OnMouseWheel", function(self, delta)
+        local current = self:GetVerticalScroll()
+        local max     = self:GetVerticalScrollRange()
+        self:SetVerticalScroll(math.max(0, math.min(max, current - delta * DROW_H)))
+    end)
+
+    local dungeonListFrame = CreateFrame("Frame", nil, dungeonScrollFrame)
+    dungeonListFrame:SetWidth(dungeonScrollFrame:GetWidth())
     dungeonListFrame:SetHeight(1)
-    win.dungeonListFrame = dungeonListFrame
+    dungeonScrollFrame:SetScrollChild(dungeonListFrame)
+
+    win.dungeonListFrame  = dungeonListFrame
     win.dungeonRows = {}
 
     -- ── Vertical divider ─────────────────────────────────────────────────
