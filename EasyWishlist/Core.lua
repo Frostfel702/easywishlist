@@ -155,18 +155,41 @@ function EWL.SaveReport(data)
     end
     local bucket = wrapper.bySpec[spec]
 
-    -- Merge: build lookup by itemID, update existing or append new
-    local byItemID = {}
-    for i, r in ipairs(bucket.results) do
-        byItemID[r.item] = i
-    end
+    -- Collect the set of sourceIds present in the incoming data
+    local incomingSourceIds = {}
     for _, r in ipairs(newResults) do
-        local idx = byItemID[r.item]
-        if idx then
-            bucket.results[idx] = r
-        else
-            bucket.results[#bucket.results + 1] = r
-            byItemID[r.item] = #bucket.results
+        if r.sourceId then
+            incomingSourceIds[r.sourceId] = true
+        end
+    end
+
+    if next(incomingSourceIds) then
+        -- Source-replacement: drop all existing items belonging to any incoming sourceId,
+        -- then append the new ones.  Items from sources not present in this import are kept.
+        local kept = {}
+        for _, r in ipairs(bucket.results) do
+            if not (r.sourceId and incomingSourceIds[r.sourceId]) then
+                kept[#kept + 1] = r
+            end
+        end
+        for _, r in ipairs(newResults) do
+            kept[#kept + 1] = r
+        end
+        bucket.results = kept
+    else
+        -- Legacy merge: update existing item by itemID or append
+        local byItemID = {}
+        for i, r in ipairs(bucket.results) do
+            byItemID[r.item] = i
+        end
+        for _, r in ipairs(newResults) do
+            local idx = byItemID[r.item]
+            if idx then
+                bucket.results[idx] = r
+            else
+                bucket.results[#bucket.results + 1] = r
+                byItemID[r.item] = #bucket.results
+            end
         end
     end
 
@@ -179,6 +202,19 @@ function EWL.SaveReport(data)
     wrapper.activeSpec  = spec
 
     return true
+end
+
+-- ─── Item Upgrade Lookup ──────────────────────────────────────────────────
+
+function EWL.GetItemUpgrade(itemID)
+    local report = EWL.GetCurrentReport()
+    if not report or not report.results then return nil end
+    for _, r in ipairs(report.results) do
+        if r.item == itemID then
+            return r.percDiff
+        end
+    end
+    return nil
 end
 
 -- ─── Difficulty Label ─────────────────────────────────────────────────────
