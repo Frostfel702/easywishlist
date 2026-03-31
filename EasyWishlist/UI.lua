@@ -1109,27 +1109,39 @@ end
 
 -- ─── Global item tooltip hook ────────────────────────────────────────────
 
-GameTooltip:HookScript("OnTooltipSetItem", function(tooltip)
-    local owner = tooltip:GetOwner()
-    if owner and owner.result then return end
+local ok, err = pcall(function()
+    TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tooltip, data)
+        local owner = tooltip:GetOwner()
+        if owner and owner.result then return end
 
-    local _, link = tooltip:GetItem()
-    if not link then return end
-    local itemID = tonumber(link:match("item:(%d+)"))
-    if not itemID then return end
+        local link = data and data.id and ("item:" .. data.id) or select(2, tooltip:GetItem())
+        if not link then return end
+        local itemID = tonumber(link:match("item:(%d+)"))
+        if not itemID then return end
 
-    local pct = EWL.GetItemUpgrade(itemID)
-    if not pct then return end
+        local upgrades = EWL.GetItemUpgradeAllWishlists(itemID)
+        if not upgrades or #upgrades == 0 then return end
 
-    local r, g, b = PctColor(pct)
-    tooltip:AddLine(" ")
-    tooltip:AddDoubleLine(
-        "|cff00ff96EWL|r Upgrade:",
-        string.format("+%.2f%%", pct),
-        r, g, b, r, g, b
-    )
-    tooltip:Show()
+        tooltip:AddLine(" ")
+        local limit = math.min(#upgrades, 3)
+        for i = 1, limit do
+            local u = upgrades[i]
+            local r, g, b = PctColor(u.pct)
+            tooltip:AddDoubleLine(
+                "|cff00ff96EWL|r " .. u.name .. ":",
+                string.format("+%.2f%%", u.pct),
+                r, g, b, r, g, b
+            )
+        end
+        if #upgrades > 3 then
+            tooltip:AddLine(string.format("|cff888888  ...and %d more|r", #upgrades - 3))
+        end
+        tooltip:Show()
+    end)
 end)
+if not ok then
+    print("|cffff4444EasyWishlist|r: Failed to register tooltip hook: " .. tostring(err))
+end
 
 -- ─── ITEM_DATA_LOAD_RESULT ───────────────────────────────────────────────
 
