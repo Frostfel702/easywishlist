@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.2] - 2026-03-31
+
+### Fixed
+- Fixed minimap button placement on non-circular minimaps (e.g. ElvUI square minimap). Position is now calculated dynamically based on the actual minimap dimensions instead of a hardcoded radius.
+
+---
+
 ## [0.4.1] - 2026-03-31
 
 ### Added
