@@ -2,15 +2,15 @@
 -- Manual minimap button (no external library dependency)
 -- Left-click: toggle main window | Right-click: open import dialog
 
-local BUTTON_RADIUS = 80  -- distance from minimap center
+local EDGE_OFFSET = 10  -- pixels beyond the minimap edge
 local ICON_SIZE = 31
 
 local minimapBtn
 
 local function UpdateMinimapButtonPosition(btn, angle)
     local rad = math.rad(angle)
-    local x = math.cos(rad) * BUTTON_RADIUS
-    local y = math.sin(rad) * BUTTON_RADIUS
+    local x = math.cos(rad) * (Minimap:GetWidth() / 2 + EDGE_OFFSET)
+    local y = math.sin(rad) * (Minimap:GetHeight() / 2 + EDGE_OFFSET)
     btn:SetPoint("CENTER", Minimap, "CENTER", x, y)
 end
 
