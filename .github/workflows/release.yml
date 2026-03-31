@@ -1,40 +1,33 @@
 name: Release
 
 on:
-  push:
+  pull_request:
+    types: [closed]
     branches: [main]
 
 jobs:
   release:
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release')
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Generate version tag
+      - name: Read version from .toc
         id: version
         run: |
-          TAG="v$(date +'%Y.%m.%d')-$(git rev-parse --short HEAD)"
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "zip=EasyWishlist-${TAG}.zip" >> $GITHUB_OUTPUT
+          VERSION=$(grep "^## Version:" EasyWishlist/EasyWishlist.toc | sed 's/## Version: //')
+          echo "tag=v${VERSION}" >> $GITHUB_OUTPUT
+          echo "zip=EasyWishlist-v${VERSION}.zip" >> $GITHUB_OUTPUT
 
-      - name: Generate changelog
+      - name: Read changelog
         id: changelog
         run: |
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -n "$LAST_TAG" ]; then
-            RANGE="${LAST_TAG}..HEAD"
-          else
-            RANGE="HEAD"
-          fi
-          CHANGELOG=$(git log $RANGE --pretty=format:"- %s" --no-merges)
           {
             echo "body<<EOF"
-            echo "$CHANGELOG"
+            cat CHANGELOG.md
             echo "EOF"
           } >> $GITHUB_OUTPUT
 
@@ -52,7 +45,6 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: ${{ steps.version.outputs.tag }}
-          body: |
-            ## Changelog
-            ${{ steps.changelog.outputs.body }}
+          body: ${{ steps.changelog.outputs.body }}
           files: ${{ steps.version.outputs.zip }}
+          overwrite: true
