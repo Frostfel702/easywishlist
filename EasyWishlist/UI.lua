@@ -1119,16 +1119,23 @@ local ok, err = pcall(function()
         local itemID = tonumber(link:match("item:(%d+)"))
         if not itemID then return end
 
-        local pct = EWL.GetItemUpgrade(itemID)
-        if not pct then return end
+        local upgrades = EWL.GetItemUpgradeAllWishlists(itemID)
+        if not upgrades or #upgrades == 0 then return end
 
-        local r, g, b = PctColor(pct)
         tooltip:AddLine(" ")
-        tooltip:AddDoubleLine(
-            "|cff00ff96EWL|r Upgrade:",
-            string.format("+%.2f%%", pct),
-            r, g, b, r, g, b
-        )
+        local limit = math.min(#upgrades, 3)
+        for i = 1, limit do
+            local u = upgrades[i]
+            local r, g, b = PctColor(u.pct)
+            tooltip:AddDoubleLine(
+                "|cff00ff96EWL|r " .. u.name .. ":",
+                string.format("+%.2f%%", u.pct),
+                r, g, b, r, g, b
+            )
+        end
+        if #upgrades > 3 then
+            tooltip:AddLine(string.format("|cff888888  ...and %d more|r", #upgrades - 3))
+        end
         tooltip:Show()
     end)
 end)

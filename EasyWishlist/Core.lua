@@ -304,6 +304,27 @@ function EWL.GetItemUpgrade(itemID)
     return nil
 end
 
+-- Returns {name, pct} for every wishlist that contains itemID, sorted by pct desc.
+function EWL.GetItemUpgradeAllWishlists(itemID)
+    local key = EWL.GetCharacterKey()
+    MigrateIfNeeded(key)
+    local wrapper = EasyWishlistDB.reports[key]
+    if not wrapper or not wrapper.byWishlist then return {} end
+    local results = {}
+    for name, bucket in pairs(wrapper.byWishlist) do
+        if bucket.results then
+            for _, r in ipairs(bucket.results) do
+                if r.item == itemID then
+                    results[#results + 1] = { name = name, pct = r.percDiff }
+                    break
+                end
+            end
+        end
+    end
+    table.sort(results, function(a, b) return a.pct > b.pct end)
+    return results
+end
+
 -- ─── Difficulty Label ─────────────────────────────────────────────────────
 
 function EWL.GetDifficultyLabel(report)
