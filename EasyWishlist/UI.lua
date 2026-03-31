@@ -1109,27 +1109,32 @@ end
 
 -- ─── Global item tooltip hook ────────────────────────────────────────────
 
-GameTooltip:HookScript("OnTooltipSetItem", function(tooltip)
-    local owner = tooltip:GetOwner()
-    if owner and owner.result then return end
+local ok, err = pcall(function()
+    TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Item, function(tooltip, data)
+        local owner = tooltip:GetOwner()
+        if owner and owner.result then return end
 
-    local _, link = tooltip:GetItem()
-    if not link then return end
-    local itemID = tonumber(link:match("item:(%d+)"))
-    if not itemID then return end
+        local link = data and data.id and ("item:" .. data.id) or select(2, tooltip:GetItem())
+        if not link then return end
+        local itemID = tonumber(link:match("item:(%d+)"))
+        if not itemID then return end
 
-    local pct = EWL.GetItemUpgrade(itemID)
-    if not pct then return end
+        local pct = EWL.GetItemUpgrade(itemID)
+        if not pct then return end
 
-    local r, g, b = PctColor(pct)
-    tooltip:AddLine(" ")
-    tooltip:AddDoubleLine(
-        "|cff00ff96EWL|r Upgrade:",
-        string.format("+%.2f%%", pct),
-        r, g, b, r, g, b
-    )
-    tooltip:Show()
+        local r, g, b = PctColor(pct)
+        tooltip:AddLine(" ")
+        tooltip:AddDoubleLine(
+            "|cff00ff96EWL|r Upgrade:",
+            string.format("+%.2f%%", pct),
+            r, g, b, r, g, b
+        )
+        tooltip:Show()
+    end)
 end)
+if not ok then
+    print("|cffff4444EasyWishlist|r: Failed to register tooltip hook: " .. tostring(err))
+end
 
 -- ─── ITEM_DATA_LOAD_RESULT ───────────────────────────────────────────────
 
