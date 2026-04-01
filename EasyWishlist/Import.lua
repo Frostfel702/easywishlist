@@ -263,6 +263,8 @@ local function CreateImportDialog()
 
         if EWL.IsRaidbotsFormat(data) then
             data = EWL.NormalizeRaidbots(data)
+        elseif EWL.IsQEFormat(data) then
+            data = EWL.NormalizeQE(data)
         end
 
         local ok, saveErr = EWL.SaveReport(data, wishlistName)

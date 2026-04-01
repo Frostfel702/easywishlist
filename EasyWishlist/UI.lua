@@ -29,8 +29,13 @@ local activeGroupHdrs = {}
 
 -- ─── State ───────────────────────────────────────────────────────────────
 
-local groupMode    = "none"   -- "none" | "source" | "slot"
-local dungeonFilter = nil     -- sourceName string or nil
+local groupMode      = "none"   -- "none" | "source" | "slot"
+local dungeonFilter  = nil      -- sourceName string or nil
+local viewingCharKey = nil      -- nil = current logged-in character
+
+local function GetViewKey()
+    return viewingCharKey or EWL.GetCharacterKey()
+end
 local slotCache    = {}       -- itemID -> display slot name
 
 local SLOT_FROM_SIM = {
@@ -432,7 +437,7 @@ local function RefreshList(scrollChild)
     wipe(activeGroupHdrs)
     wipe(pendingItems)
 
-    local report = EWL.GetCurrentReport()
+    local report = EWL.GetReportForKey(GetViewKey())
     ShowEmptyState(scrollChild, not report or not report.results or #report.results == 0)
     if not report or not report.results then return end
 
@@ -542,7 +547,9 @@ local function CloseWishlistPopup()
 end
 
 local function OpenWishlistPopup(anchor)
-    local wishlists, activeWishlist = EWL.GetWishlists()
+    local currentKey    = EWL.GetCharacterKey()
+    local viewKey       = GetViewKey()
+    local wishlists, activeWishlist = EWL.GetWishlistsForKey(viewKey)
 
     if not wishlistPopup then
         wishlistPopup = CreateFrame("Frame", "EWLWishlistPopup", UIParent, "BackdropTemplate")
@@ -565,6 +572,7 @@ local function OpenWishlistPopup(anchor)
     local WIDTH  = SIDEBAR_W - 4
     local yOff   = -PAD
 
+    -- ── Current viewing character's wishlists ────────────────────────────
     for _, name in ipairs(wishlists) do
         local row = CreateFrame("Button", nil, wishlistPopup)
         row:SetHeight(PROW_H)
@@ -594,9 +602,11 @@ local function OpenWishlistPopup(anchor)
         end
 
         local capturedName = name
+        local capturedKey  = viewKey
         row:SetScript("OnClick", function()
-            EWL.SetActiveWishlist(capturedName)
-            dungeonFilter = nil
+            EWL.SetActiveWishlistForKey(capturedKey, capturedName)
+            viewingCharKey = (capturedKey ~= currentKey) and capturedKey or nil
+            dungeonFilter  = nil
             CloseWishlistPopup()
             EWL.RefreshMainWindow()
         end)
@@ -637,9 +647,15 @@ local function OpenWishlistPopup(anchor)
         local shortName = activeWishlist and (activeWishlist:sub(1, 16) .. (activeWishlist:len() > 16 and "..." or "")) or "?"
         delLbl:SetText("|cffff6666Delete \"" .. shortName .. "\"|r")
 
+        local capturedKey = viewKey
         delRow:SetScript("OnClick", function()
             if activeWishlist then
-                EWL.DeleteWishlist(activeWishlist)
+                EWL.DeleteWishlistForKey(capturedKey, activeWishlist)
+                if capturedKey ~= currentKey then
+                    -- If deleted all wishlists of another char, reset to current
+                    local remaining = EWL.GetWishlistsForKey(capturedKey)
+                    if #remaining == 0 then viewingCharKey = nil end
+                end
                 dungeonFilter = nil
             end
             CloseWishlistPopup()
@@ -649,6 +665,82 @@ local function OpenWishlistPopup(anchor)
         delRow:Show()
         wishlistPopup.rows[#wishlistPopup.rows + 1] = delRow
         yOff = yOff - PROW_H - 4
+    end
+
+    -- ── Other characters ─────────────────────────────────────────────────
+    local allKeys = EWL.GetAllCharacterKeys()
+    local otherKeys = {}
+    for _, k in ipairs(allKeys) do
+        if k ~= viewKey then otherKeys[#otherKeys + 1] = k end
+    end
+
+    if #otherKeys > 0 then
+        -- Separator + header
+        local sep2 = CreateFrame("Frame", nil, wishlistPopup)
+        sep2:SetHeight(9)
+        sep2:SetPoint("TOPLEFT",  PAD,  yOff - 2)
+        sep2:SetPoint("TOPRIGHT", -PAD, yOff - 2)
+        local sep2Line = sep2:CreateTexture(nil, "ARTWORK")
+        sep2Line:SetPoint("TOPLEFT",  0, -4)
+        sep2Line:SetPoint("TOPRIGHT", 0, -4)
+        sep2Line:SetHeight(1)
+        sep2Line:SetColorTexture(0.4, 0.4, 0.4, 0.4)
+        sep2:Show()
+        wishlistPopup.rows[#wishlistPopup.rows + 1] = sep2
+        yOff = yOff - 11
+
+        local otherHdr = wishlistPopup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        otherHdr:SetPoint("TOPLEFT", PAD, yOff)
+        otherHdr:SetText("|cff888888Other Characters|r")
+        wishlistPopup.rows[#wishlistPopup.rows + 1] = otherHdr
+        yOff = yOff - PROW_H
+
+        for _, k in ipairs(otherKeys) do
+            local charName = k:match("^(.-)%-") or k
+            local otherWishlists, otherActive = EWL.GetWishlistsForKey(k)
+
+            -- Character name label
+            local charLbl = wishlistPopup:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+            charLbl:SetPoint("TOPLEFT", PAD, yOff)
+            charLbl:SetText("|cffffaa00" .. charName .. "|r")
+            wishlistPopup.rows[#wishlistPopup.rows + 1] = charLbl
+            yOff = yOff - PROW_H
+
+            for _, wname in ipairs(otherWishlists) do
+                local wrow = CreateFrame("Button", nil, wishlistPopup)
+                wrow:SetHeight(PROW_H)
+                wrow:SetPoint("TOPLEFT",  PAD + 10, yOff)
+                wrow:SetPoint("TOPRIGHT", -PAD,     yOff)
+
+                local whl = wrow:CreateTexture(nil, "HIGHLIGHT")
+                whl:SetAllPoints()
+                whl:SetColorTexture(1, 1, 1, 0.08)
+
+                local wlbl = wrow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+                wlbl:SetPoint("LEFT", 0, 0)
+                wlbl:SetJustifyH("LEFT")
+                wlbl:SetText(wname)
+                if wname == otherActive then
+                    wlbl:SetTextColor(0.9, 0.9, 0.9)
+                else
+                    wlbl:SetTextColor(0.55, 0.55, 0.55)
+                end
+
+                local capturedKey  = k
+                local capturedName = wname
+                wrow:SetScript("OnClick", function()
+                    EWL.SetActiveWishlistForKey(capturedKey, capturedName)
+                    viewingCharKey = capturedKey
+                    dungeonFilter  = nil
+                    CloseWishlistPopup()
+                    EWL.RefreshMainWindow()
+                end)
+
+                wrow:Show()
+                wishlistPopup.rows[#wishlistPopup.rows + 1] = wrow
+                yOff = yOff - PROW_H
+            end
+        end
     end
 
     local totalH = PAD + (-yOff)
@@ -665,11 +757,18 @@ local function RefreshSidebar()
     local win = mainWindow
 
     -- Update wishlist dropdown label
-    local wishlists, activeWishlist = EWL.GetWishlists()
+    local viewKey = GetViewKey()
+    local wishlists, activeWishlist = EWL.GetWishlistsForKey(viewKey)
     if win.wishlistDropBtn then
         if activeWishlist then
             local short = activeWishlist:len() > 18 and activeWishlist:sub(1, 16) .. "..." or activeWishlist
-            win.wishlistDropBtn:SetText(short .. " v")
+            if viewKey ~= EWL.GetCharacterKey() then
+                local charShort = viewKey:match("^(.-)%-") or viewKey
+                if charShort:len() > 10 then charShort = charShort:sub(1, 8) .. ".." end
+                win.wishlistDropBtn:SetText("|cffffaa00" .. charShort .. "|r: " .. short .. " v")
+            else
+                win.wishlistDropBtn:SetText(short .. " v")
+            end
         else
             win.wishlistDropBtn:SetText("None v")
         end
@@ -677,7 +776,7 @@ local function RefreshSidebar()
 
     -- Update "All Sources" pinned row
     if win.allSourcesRow then
-        local report     = EWL.GetCurrentReport()
+        local report     = EWL.GetReportForKey(viewKey)
         local totalCount = report and report.results and #report.results or 0
         local isAll      = (dungeonFilter == nil)
         if isAll then
@@ -698,7 +797,7 @@ local function RefreshSidebar()
     end
 
     -- Rebuild dungeon rows
-    local dungeons   = EWL.GetDungeonList()
+    local dungeons   = EWL.GetDungeonListForKey(viewKey)
     local listFrame  = win.dungeonListFrame
     if not listFrame then return end
 
@@ -808,10 +907,11 @@ local function RefreshSidebar()
             RefreshList(win.scrollChild)
         end)
 
+        local capturedKey = GetViewKey()
         row.trashBtn:SetScript("OnClick", function()
             local dialog = StaticPopup_Show("EWL_CONFIRM_DELETE_DUNGEON", capturedName)
             if dialog then
-                dialog.data = { sourceName = capturedName }
+                dialog.data = { sourceName = capturedName, key = capturedKey }
             end
         end)
 
@@ -828,10 +928,10 @@ StaticPopupDialogs["EWL_CONFIRM_DELETE_DUNGEON"] = {
     button1   = "Remove",
     button2   = "Cancel",
     OnAccept  = function(self)
-        local name = self.data and self.data.sourceName
-        if not name then return end
-        EWL.DeleteDungeon(name)
-        if dungeonFilter == name then dungeonFilter = nil end
+        local d = self.data
+        if not d or not d.sourceName then return end
+        EWL.DeleteDungeonForKey(d.key or EWL.GetCharacterKey(), d.sourceName)
+        if dungeonFilter == d.sourceName then dungeonFilter = nil end
         EWL.RefreshMainWindow()
     end,
     timeout      = 0,
@@ -1083,6 +1183,8 @@ local function CreateMainWindow()
 
     win:SetScript("OnHide", function()
         CloseWishlistPopup()
+        viewingCharKey = nil
+        dungeonFilter  = nil
     end)
 
     win:Hide()

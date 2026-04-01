@@ -17,6 +17,9 @@ local function InitDB()
     if not EasyWishlistDB.minimapPos then
         EasyWishlistDB.minimapPos = { angle = 225 }
     end
+    if not EasyWishlistDB.migrationWarningShown then
+        EasyWishlistDB.migrationWarningShown = {}
+    end
 end
 
 -- ─── Character Key ────────────────────────────────────────────────────────
@@ -216,7 +219,11 @@ function EWL.SaveReport(data, wishlistName)
         end
     end
 
-    local key = EWL.GetCharacterKey()
+    local charName = (data.playername and data.playername ~= "" and data.playername ~= "Unknown")
+        and data.playername or UnitName("player")
+    local realmStr = (data.realm and data.realm ~= "") and data.realm or GetRealmName()
+    local charRealm = realmStr:gsub("[%s%-]", "")
+    local key = charName .. "-" .. charRealm
     MigrateIfNeeded(key)
 
     local wrapper = EasyWishlistDB.reports[key]
@@ -230,6 +237,8 @@ function EWL.SaveReport(data, wishlistName)
     end
     local bucket = wrapper.byWishlist[wishlistName]
     if not bucket.dungeonImports then bucket.dungeonImports = {} end
+    bucket.playername = charName
+    bucket.realm      = charRealm
 
     -- Collect the set of sourceIds and item IDs present in the incoming data
     local incomingSourceIds = {}
@@ -325,6 +334,101 @@ function EWL.GetItemUpgradeAllWishlists(itemID)
     return results
 end
 
+-- ─── Cross-character Data Access ──────────────────────────────────────────
+
+-- Returns all character keys that have stored data, sorted.
+function EWL.GetAllCharacterKeys()
+    local keys = {}
+    for k in pairs(EasyWishlistDB.reports or {}) do
+        keys[#keys + 1] = k
+    end
+    table.sort(keys)
+    return keys
+end
+
+-- Returns sorted wishlist names and active one for any character key.
+function EWL.GetWishlistsForKey(key)
+    MigrateIfNeeded(key)
+    local wrapper = EasyWishlistDB.reports[key]
+    if not wrapper or not wrapper.byWishlist then return {}, nil end
+    local names = {}
+    for name in pairs(wrapper.byWishlist) do names[#names + 1] = name end
+    table.sort(names)
+    return names, wrapper.activeWishlist
+end
+
+-- Returns the active report for any character key.
+function EWL.GetReportForKey(key)
+    MigrateIfNeeded(key)
+    local wrapper = EasyWishlistDB.reports[key]
+    if not wrapper or not wrapper.activeWishlist then return nil end
+    return wrapper.byWishlist[wrapper.activeWishlist]
+end
+
+-- Returns dungeon list for any character key.
+function EWL.GetDungeonListForKey(key)
+    local report = EWL.GetReportForKey(key)
+    if not report then return {} end
+    if not report.dungeonImports then report.dungeonImports = {} end
+    if not next(report.dungeonImports) and report.results and #report.results > 0 then
+        for _, r in ipairs(report.results) do
+            local src = r.sourceName or r.dropLoc or "Unknown"
+            if not report.dungeonImports[src] then
+                report.dungeonImports[src] = report.lastUpdated or ""
+            end
+        end
+    end
+    local list = {}
+    for name, date in pairs(report.dungeonImports) do
+        list[#list + 1] = { name = name, lastUpdated = date }
+    end
+    table.sort(list, function(a, b) return a.name < b.name end)
+    return list
+end
+
+-- Sets active wishlist for any character key.
+function EWL.SetActiveWishlistForKey(key, name)
+    MigrateIfNeeded(key)
+    local wrapper = EasyWishlistDB.reports[key]
+    if not wrapper or not wrapper.byWishlist[name] then return end
+    wrapper.activeWishlist = name
+end
+
+-- Deletes a wishlist for any character key.
+function EWL.DeleteWishlistForKey(key, name)
+    MigrateIfNeeded(key)
+    local wrapper = EasyWishlistDB.reports[key]
+    if not wrapper or not wrapper.byWishlist then return end
+    local count = 0
+    for _ in pairs(wrapper.byWishlist) do count = count + 1 end
+    if count <= 1 then return end
+    wrapper.byWishlist[name] = nil
+    if wrapper.activeWishlist == name then
+        local remaining = {}
+        for n in pairs(wrapper.byWishlist) do remaining[#remaining + 1] = n end
+        table.sort(remaining)
+        wrapper.activeWishlist = remaining[1]
+    end
+end
+
+-- Removes a dungeon's items from any character key's active wishlist.
+function EWL.DeleteDungeonForKey(key, sourceName)
+    local report = EWL.GetReportForKey(key)
+    if not report then return end
+    if report.results then
+        local kept = {}
+        for _, r in ipairs(report.results) do
+            if (r.sourceName or r.dropLoc or "Unknown") ~= sourceName then
+                kept[#kept + 1] = r
+            end
+        end
+        report.results = kept
+    end
+    if report.dungeonImports then
+        report.dungeonImports[sourceName] = nil
+    end
+end
+
 -- ─── Difficulty Label ─────────────────────────────────────────────────────
 
 function EWL.GetDifficultyLabel(report)
@@ -347,6 +451,28 @@ function EWL.GetDifficultyLabel(report)
     return ct or ""
 end
 
+-- ─── Migration Warning ────────────────────────────────────────────────────
+
+local function CheckMisplacedWishlists()
+    local key = EWL.GetCharacterKey()
+    if EasyWishlistDB.migrationWarningShown[key] then return end
+    MigrateIfNeeded(key)
+    local wrapper = EasyWishlistDB.reports[key]
+    if not wrapper or not wrapper.byWishlist then return end
+    local charName = UnitName("player")
+    local hasIssue = false
+    for _, bucket in pairs(wrapper.byWishlist) do
+        if not bucket.playername or bucket.playername ~= charName then
+            hasIssue = true
+            break
+        end
+    end
+    if hasIssue then
+        EasyWishlistDB.migrationWarningShown[key] = true
+        print("|cff00ff96EasyWishlist:|r |cffff6600Warning:|r Some wishlists could not be verified as belonging to this character. Please re-import them to ensure correct data.")
+    end
+end
+
 -- ─── ADDON_LOADED ─────────────────────────────────────────────────────────
 
 local frame = CreateFrame("Frame")
@@ -356,7 +482,7 @@ frame:SetScript("OnEvent", function(self, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
         InitDB()
     elseif event == "PLAYER_LOGIN" then
-        -- Character name/realm are available after PLAYER_LOGIN
+        CheckMisplacedWishlists()
     end
 end)
 
