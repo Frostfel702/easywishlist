@@ -219,11 +219,20 @@ function EWL.SaveReport(data, wishlistName)
         end
     end
 
-    local charName = (data.playername and data.playername ~= "" and data.playername ~= "Unknown")
-        and data.playername or UnitName("player")
-    local realmStr = (data.realm and data.realm ~= "") and data.realm or GetRealmName()
-    local charRealm = realmStr:gsub("[%s%-]", "")
-    local key = charName .. "-" .. charRealm
+    local currentName = UnitName("player") or "Unknown"
+    local charName, key
+    if data.playername and data.playername ~= "" and data.playername ~= "Unknown"
+        and data.playername:lower() ~= currentName:lower() then
+        -- Importing for a different character — derive key from data
+        local realmStr = (data.realm and data.realm ~= "") and data.realm or GetRealmName()
+        local charRealm = realmStr:gsub("[%s%-]", "")
+        charName = data.playername
+        key = charName .. "-" .. charRealm
+    else
+        -- Importing for the current character — use exact in-game key
+        charName = currentName
+        key = EWL.GetCharacterKey()
+    end
     MigrateIfNeeded(key)
 
     local wrapper = EasyWishlistDB.reports[key]
