@@ -29,7 +29,7 @@ local activeGroupHdrs = {}
 
 -- ─── State ───────────────────────────────────────────────────────────────
 
-local groupMode    = "none"   -- "none" | "source" | "slot"
+local groupMode    = "none"   -- "none" | "source" | "slot" | "boss"
 local dungeonFilter = nil     -- sourceName string or nil
 local slotCache    = {}       -- itemID -> display slot name
 
@@ -283,6 +283,13 @@ local function SourceKey(result)
     return name
 end
 
+local function BossKey(result)
+    if result.dropBoss and result.dropBoss ~= "" then
+        return result.dropBoss
+    end
+    return result.sourceName or result.dropLoc or "Unknown"
+end
+
 local function BuildDisplayList(results)
     if groupMode == "none" then
         local list = {}
@@ -297,6 +304,7 @@ local function BuildDisplayList(results)
 
     for i, r in ipairs(results) do
         local key = (groupMode == "source") and SourceKey(r)
+                 or (groupMode == "boss")   and BossKey(r)
                  or (GetItemSlot(r) or "Other")
         if not groupMap[key] then
             groupMap[key] = {}
@@ -1042,6 +1050,7 @@ local function CreateMainWindow()
 
     MakeGroupBtn("By Source", "source", 68)
     MakeGroupBtn("By Slot",   "slot",   146)
+    MakeGroupBtn("By Boss",   "boss",   224)
 
     -- Divider
     local rpDivider = rightPanel:CreateTexture(nil, "ARTWORK")
