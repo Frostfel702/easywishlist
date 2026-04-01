@@ -616,8 +616,8 @@ local function OpenWishlistPopup(anchor)
         yOff = yOff - PROW_H
     end
 
-    -- Delete current wishlist option (only if more than one exists)
-    if #wishlists > 1 then
+    -- Delete current wishlist option
+    if #wishlists >= 1 then
         -- Separator
         local sep = CreateFrame("Frame", nil, wishlistPopup)
         sep:SetHeight(9)
@@ -647,19 +647,16 @@ local function OpenWishlistPopup(anchor)
         local shortName = activeWishlist and (activeWishlist:sub(1, 16) .. (activeWishlist:len() > 16 and "..." or "")) or "?"
         delLbl:SetText("|cffff6666Delete \"" .. shortName .. "\"|r")
 
-        local capturedKey = viewKey
+        local capturedKey  = viewKey
+        local capturedName = activeWishlist
         delRow:SetScript("OnClick", function()
-            if activeWishlist then
-                EWL.DeleteWishlistForKey(capturedKey, activeWishlist)
-                if capturedKey ~= currentKey then
-                    -- If deleted all wishlists of another char, reset to current
-                    local remaining = EWL.GetWishlistsForKey(capturedKey)
-                    if #remaining == 0 then viewingCharKey = nil end
+            if capturedName then
+                CloseWishlistPopup()
+                local dialog = StaticPopup_Show("EWL_CONFIRM_DELETE_WISHLIST", capturedName)
+                if dialog then
+                    dialog.data = { key = capturedKey, name = capturedName }
                 end
-                dungeonFilter = nil
             end
-            CloseWishlistPopup()
-            EWL.RefreshMainWindow()
         end)
 
         delRow:Show()
