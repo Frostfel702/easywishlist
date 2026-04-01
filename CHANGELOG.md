@@ -1,20 +1,5 @@
 # Changelog
 
-## [0.5.0] - 2026-04-01
-
-### Added
-- Per-character wishlists: importing a sim for a different character now stores data under that character's key; the wishlist popup shows other characters' wishlists grouped by character.
-- QE Live compact format (sources[].items) is now supported alongside Raidbots.
-- Delete option for other characters' wishlists, with a confirmation dialog.
-- Group-by-boss mode in the item list, alongside the existing By Source and By Slot views.
-
-### Fixed
-- Minimap button now uses LibDBIcon-1.0 for correct placement on all minimap shapes, including ElvUI's square minimap.
-- Import now uses the in-game character key when the sim's player matches the logged-in character, fixing tooltip lookups on realms with special characters (e.g. Zul'jin).
-- Delete button now always appears for the selected wishlist, even when only one wishlist exists.
-
----
-
 ## [0.4.2] - 2026-03-31
 
 ### Fixed
