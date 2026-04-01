@@ -717,7 +717,8 @@ local function OpenWishlistPopup(anchor)
                 whl:SetColorTexture(1, 1, 1, 0.08)
 
                 local wlbl = wrow:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
-                wlbl:SetPoint("LEFT", 0, 0)
+                wlbl:SetPoint("LEFT",  0,   0)
+                wlbl:SetPoint("RIGHT", -20, 0)
                 wlbl:SetJustifyH("LEFT")
                 wlbl:SetText(wname)
                 if wname == otherActive then
@@ -726,8 +727,29 @@ local function OpenWishlistPopup(anchor)
                     wlbl:SetTextColor(0.55, 0.55, 0.55)
                 end
 
+                -- Trash button
+                local wtrash = CreateFrame("Button", nil, wrow)
+                wtrash:SetSize(18, 18)
+                wtrash:SetPoint("RIGHT", -1, 0)
+
+                local wtrashHl = wtrash:CreateTexture(nil, "HIGHLIGHT")
+                wtrashHl:SetAllPoints()
+                wtrashHl:SetColorTexture(1, 0.2, 0.2, 0.25)
+
+                local wtrashLbl = wtrash:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+                wtrashLbl:SetPoint("CENTER")
+                wtrashLbl:SetText("|cffaa3333x|r")
+
                 local capturedKey  = k
                 local capturedName = wname
+                wtrash:SetScript("OnClick", function()
+                    CloseWishlistPopup()
+                    local dialog = StaticPopup_Show("EWL_CONFIRM_DELETE_WISHLIST", capturedName)
+                    if dialog then
+                        dialog.data = { key = capturedKey, name = capturedName }
+                    end
+                end)
+
                 wrow:SetScript("OnClick", function()
                     EWL.SetActiveWishlistForKey(capturedKey, capturedName)
                     viewingCharKey = capturedKey
@@ -922,6 +944,29 @@ local function RefreshSidebar()
 end
 
 -- ─── Confirmation dialogs ────────────────────────────────────────────────
+
+StaticPopupDialogs["EWL_CONFIRM_DELETE_WISHLIST"] = {
+    text      = "Remove wishlist \"%s\"?",
+    button1   = "Remove",
+    button2   = "Cancel",
+    OnAccept  = function(self)
+        local d = self.data
+        if not d or not d.key or not d.name then return end
+        EWL.DeleteWishlistForKey(d.key, d.name)
+        if viewingCharKey == d.key then
+            local remaining = EWL.GetWishlistsForKey(d.key)
+            if #remaining == 0 then
+                viewingCharKey = nil
+                dungeonFilter  = nil
+            end
+        end
+        EWL.RefreshMainWindow()
+    end,
+    timeout      = 0,
+    whileDead    = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
 
 StaticPopupDialogs["EWL_CONFIRM_DELETE_DUNGEON"] = {
     text      = "Remove all \"%s\" items from this wishlist?",

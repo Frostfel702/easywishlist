@@ -395,14 +395,16 @@ function EWL.SetActiveWishlistForKey(key, name)
 end
 
 -- Deletes a wishlist for any character key.
+-- If it was the last wishlist, removes the character entry entirely.
 function EWL.DeleteWishlistForKey(key, name)
     MigrateIfNeeded(key)
     local wrapper = EasyWishlistDB.reports[key]
     if not wrapper or not wrapper.byWishlist then return end
-    local count = 0
-    for _ in pairs(wrapper.byWishlist) do count = count + 1 end
-    if count <= 1 then return end
     wrapper.byWishlist[name] = nil
+    if not next(wrapper.byWishlist) then
+        EasyWishlistDB.reports[key] = nil
+        return
+    end
     if wrapper.activeWishlist == name then
         local remaining = {}
         for n in pairs(wrapper.byWishlist) do remaining[#remaining + 1] = n end
