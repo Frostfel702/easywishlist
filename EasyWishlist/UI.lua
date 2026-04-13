@@ -449,16 +449,18 @@ end
 
 -- ─── Stat cache ──────────────────────────────────────────────────────────
 
-local function TryCacheStats(itemID, ilvl)
-    local link = string.format("item:%d:::::::::%d:0:0:0", itemID, ilvl or 0)
-    local stats = C_Item.GetItemStats(link)
-    if not stats or not next(stats) then
-        stats = C_Item.GetItemStats("item:" .. itemID)
-    end
-    if not stats then return false end
+local function TryCacheStats(itemID)
+    local tooltipData = C_TooltipInfo.GetItemByID(itemID)
+    if not tooltipData or not tooltipData.lines then return false end
     local found = {}
-    for k, v in pairs(stats) do
-        if v and v > 0 then found[k] = true end
+    for _, line in ipairs(tooltipData.lines) do
+        local t = line.leftText
+        if t then
+            if t:find("Haste",          1, true) then found["ITEM_MOD_HASTE_RATING"]       = true end
+            if t:find("Mastery",         1, true) then found["ITEM_MOD_MASTERY_RATING"]     = true end
+            if t:find("Critical Strike", 1, true) then found["ITEM_MOD_CRIT_STRIKE_RATING"] = true end
+            if t:find("Versatility",     1, true) then found["ITEM_MOD_VERSATILITY"]        = true end
+        end
     end
     statCache[itemID] = found
     return true
@@ -499,7 +501,7 @@ local function RefreshList(scrollChild)
     -- Request stat data for any uncached items
     for _, r in ipairs(results) do
         if not statCache[r.item] then
-            pendingStats[r.item] = r.level or 0
+            pendingStats[r.item] = true
             C_Item.RequestLoadItemDataByID(r.item)
         end
     end
@@ -1297,7 +1299,11 @@ local function CreateMainWindow()
         Refresh()
 
         btn:SetScript("OnClick", function()
-            activeStatFilters[capturedKey] = activeStatFilters[capturedKey] and nil or true
+            if activeStatFilters[capturedKey] then
+                activeStatFilters[capturedKey] = nil
+            else
+                activeStatFilters[capturedKey] = true
+            end
             Refresh()
             RefreshList(win.scrollChild)
         end)
@@ -1418,10 +1424,9 @@ itemEventFrame:SetScript("OnEvent", function(self, event, itemID, success)
     if not success then return end
 
     -- Populate stat cache if this item was requested for filtering
-    if pendingStats[itemID] ~= nil then
-        local ilvl = pendingStats[itemID]
+    if pendingStats[itemID] then
         pendingStats[itemID] = nil
-        TryCacheStats(itemID, ilvl)
+        TryCacheStats(itemID)
         -- Re-filter list now that we have this item's stats
         if next(activeStatFilters) and mainWindow and mainWindow:IsShown() then
             RefreshList(mainWindow.scrollChild)
