@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0] - 2026-04-13
+
+### Added
+- Secondary stat filters (Haste, Mastery, Crit, Vers) in the item list. Toggle one or more stat buttons to narrow the list to gear that has all selected stats. Stats are loaded in the background via the WoW item API and cached per session; the list updates live as data arrives.
+
+---
+
 ## [0.5.0] - 2026-04-01
 
 ### Added
