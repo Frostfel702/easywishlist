@@ -36,7 +36,18 @@ local viewingCharKey = nil      -- nil = current logged-in character
 local function GetViewKey()
     return viewingCharKey or EWL.GetCharacterKey()
 end
-local slotCache    = {}       -- itemID -> display slot name
+local slotCache         = {}   -- itemID -> display slot name
+local statCache         = {}   -- itemID -> { statKey=true, ... }
+local pendingStats      = {}   -- itemID -> ilvl awaiting ITEM_DATA_LOAD_RESULT for stat caching
+local activeStatFilters = {}   -- statKey -> true (AND logic)
+local statFilterBtns    = {}
+
+local STAT_DEFS = {
+    { key = "ITEM_MOD_HASTE_RATING",      label = "Haste"   },
+    { key = "ITEM_MOD_MASTERY_RATING",    label = "Mastery" },
+    { key = "ITEM_MOD_CRIT_STRIKE_RATING", label = "Crit"   },
+    { key = "ITEM_MOD_VERSATILITY",       label = "Vers"    },
+}
 
 local SLOT_FROM_SIM = {
     head="Head", neck="Neck", shoulder="Shoulders", back="Back",
@@ -436,6 +447,29 @@ local function ShowEmptyState(contentFrame, show)
     contentFrame.tutorialFrame:SetShown(show)
 end
 
+-- ─── Stat cache ──────────────────────────────────────────────────────────
+
+local function TryCacheStats(itemID, ilvl)
+    local link = string.format("item:%d:::::::::%d:0:0:0", itemID, ilvl or 0)
+    local stats = C_Item.GetItemStats(link)
+    if not stats or not next(stats) then
+        stats = C_Item.GetItemStats("item:" .. itemID)
+    end
+    if not stats then return false end
+    local found = {}
+    for k, v in pairs(stats) do
+        if v and v > 0 then found[k] = true end
+    end
+    statCache[itemID] = found
+    return true
+end
+
+local function RefreshStatBtns()
+    for _, btn in ipairs(statFilterBtns) do
+        if btn.Refresh then btn.Refresh() end
+    end
+end
+
 -- ─── Refresh list ────────────────────────────────────────────────────────
 
 local function RefreshList(scrollChild)
@@ -444,6 +478,7 @@ local function RefreshList(scrollChild)
     wipe(activeRows)
     wipe(activeGroupHdrs)
     wipe(pendingItems)
+    wipe(pendingStats)
 
     local report = EWL.GetReportForKey(GetViewKey())
     ShowEmptyState(scrollChild, not report or not report.results or #report.results == 0)
@@ -455,6 +490,33 @@ local function RefreshList(scrollChild)
         local filtered = {}
         for _, r in ipairs(results) do
             if (r.sourceName or r.dropLoc or "Unknown") == dungeonFilter then
+                filtered[#filtered + 1] = r
+            end
+        end
+        results = filtered
+    end
+
+    -- Request stat data for any uncached items
+    for _, r in ipairs(results) do
+        if not statCache[r.item] then
+            pendingStats[r.item] = r.level or 0
+            C_Item.RequestLoadItemDataByID(r.item)
+        end
+    end
+
+    -- Apply stat filter (AND logic: item must have ALL selected stats)
+    if next(activeStatFilters) then
+        local filtered = {}
+        for _, r in ipairs(results) do
+            local itemStats = statCache[r.item]
+            if itemStats then
+                local match = true
+                for statKey in pairs(activeStatFilters) do
+                    if not itemStats[statKey] then match = false; break end
+                end
+                if match then filtered[#filtered + 1] = r end
+            else
+                -- Stats not yet loaded — include tentatively, re-filters when loaded
                 filtered[#filtered + 1] = r
             end
         end
@@ -1194,23 +1256,72 @@ local function CreateMainWindow()
     MakeGroupBtn("By Slot",   "slot",   146)
     MakeGroupBtn("By Boss",   "boss",   224)
 
+    -- Stat filter row
+    local statsLabel = rightPanel:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    statsLabel:SetPoint("TOPLEFT", 14, -27)
+    statsLabel:SetText("Stats:")
+    statsLabel:SetTextColor(0.5, 0.5, 0.5)
+
+    wipe(statFilterBtns)
+    local statBtnX = 60
+    for _, def in ipairs(STAT_DEFS) do
+        local btn = CreateFrame("Button", nil, rightPanel)
+        btn:SetSize(60, 18)
+        btn:SetPoint("TOPLEFT", rightPanel, "TOPLEFT", statBtnX, -25)
+        statBtnX = statBtnX + 64
+
+        local bg = btn:CreateTexture(nil, "BACKGROUND")
+        bg:SetAllPoints()
+        btn.bg = bg
+
+        local hl = btn:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetAllPoints()
+        hl:SetColorTexture(1, 1, 1, 0.06)
+
+        local t = btn:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+        t:SetPoint("CENTER")
+        t:SetText(def.label)
+        btn.t = t
+
+        local capturedKey = def.key
+        local function Refresh()
+            if activeStatFilters[capturedKey] then
+                btn.bg:SetColorTexture(0.1, 0.55, 0.35, 0.40)
+                t:SetTextColor(0.2, 1.0, 0.65)
+            else
+                btn.bg:SetColorTexture(0.12, 0.12, 0.12, 0.8)
+                t:SetTextColor(0.55, 0.55, 0.55)
+            end
+        end
+        btn.Refresh = Refresh
+        Refresh()
+
+        btn:SetScript("OnClick", function()
+            activeStatFilters[capturedKey] = activeStatFilters[capturedKey] and nil or true
+            Refresh()
+            RefreshList(win.scrollChild)
+        end)
+
+        statFilterBtns[#statFilterBtns + 1] = btn
+    end
+
     -- Divider
     local rpDivider = rightPanel:CreateTexture(nil, "ARTWORK")
-    rpDivider:SetPoint("TOPLEFT",  14, -28)
-    rpDivider:SetPoint("TOPRIGHT", -6, -28)
+    rpDivider:SetPoint("TOPLEFT",  14, -50)
+    rpDivider:SetPoint("TOPRIGHT", -6, -50)
     rpDivider:SetHeight(1)
     rpDivider:SetColorTexture(0.4, 0.4, 0.4, 0.6)
 
     -- Column headers
     local headerFrame = CreateFrame("Frame", nil, rightPanel)
-    headerFrame:SetPoint("TOPLEFT",  14, -32)
-    headerFrame:SetPoint("TOPRIGHT", -6, -32)
+    headerFrame:SetPoint("TOPLEFT",  14, -54)
+    headerFrame:SetPoint("TOPRIGHT", -6, -54)
     headerFrame:SetHeight(20)
     CreateHeaders(headerFrame)
 
     -- Scroll frame
     local scrollFrame = CreateFrame("ScrollFrame", nil, rightPanel, "UIPanelScrollFrameTemplate")
-    scrollFrame:SetPoint("TOPLEFT",     14, -56)
+    scrollFrame:SetPoint("TOPLEFT",     14, -78)
     scrollFrame:SetPoint("BOTTOMRIGHT", -6,   0)
 
     local scrollChild = CreateFrame("Frame", nil, scrollFrame)
@@ -1236,6 +1347,9 @@ local function CreateMainWindow()
         CloseWishlistPopup()
         viewingCharKey = nil
         dungeonFilter  = nil
+        wipe(activeStatFilters)
+        wipe(pendingStats)
+        RefreshStatBtns()
     end)
 
     win:Hide()
@@ -1302,6 +1416,19 @@ local itemEventFrame = CreateFrame("Frame")
 itemEventFrame:RegisterEvent("ITEM_DATA_LOAD_RESULT")
 itemEventFrame:SetScript("OnEvent", function(self, event, itemID, success)
     if not success then return end
+
+    -- Populate stat cache if this item was requested for filtering
+    if pendingStats[itemID] ~= nil then
+        local ilvl = pendingStats[itemID]
+        pendingStats[itemID] = nil
+        TryCacheStats(itemID, ilvl)
+        -- Re-filter list now that we have this item's stats
+        if next(activeStatFilters) and mainWindow and mainWindow:IsShown() then
+            RefreshList(mainWindow.scrollChild)
+            return
+        end
+    end
+
     if not pendingItems[itemID] then return end
     if not mainWindow or not mainWindow:IsShown() then return end
 
