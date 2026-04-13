@@ -451,9 +451,9 @@ end
 
 local function TryCacheStats(itemID, ilvl)
     local link = string.format("item:%d:::::::::%d:0:0:0", itemID, ilvl or 0)
-    local stats = C_Item.GetItemStats(link)
+    local stats = GetItemStats(link)
     if not stats or not next(stats) then
-        stats = C_Item.GetItemStats("item:" .. itemID)
+        stats = GetItemStats("item:" .. itemID)
     end
     if not stats then return false end
     local found = {}
@@ -1297,7 +1297,11 @@ local function CreateMainWindow()
         Refresh()
 
         btn:SetScript("OnClick", function()
-            activeStatFilters[capturedKey] = activeStatFilters[capturedKey] and nil or true
+            if activeStatFilters[capturedKey] then
+                activeStatFilters[capturedKey] = nil
+            else
+                activeStatFilters[capturedKey] = true
+            end
             Refresh()
             RefreshList(win.scrollChild)
         end)
