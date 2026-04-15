@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.6.1] - 2026-04-15
+
+### Fixed
+- Stat filter buttons now toggle off correctly when clicked a second time.
+- Stat filters now work on all WoW clients post-Dragonflight. `GetItemStats` was removed by Blizzard; the addon now uses `C_TooltipInfo.GetItemByID` to read secondary stats from tooltip data.
+
+---
+
 ## [0.6.0] - 2026-04-13
 
 ### Added
