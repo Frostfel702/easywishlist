@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.6.2] - 2026-04-15
+
+### Added
+- Secondary stat filters (Haste, Mastery, Crit, Vers) in the item list. Toggle one or more stat buttons to narrow the list to gear that has all selected stats. Stats load in the background and the list updates live as filters are toggled.
+
+### Fixed
+- Stat filter buttons now toggle off correctly when clicked a second time.
+- Stat filters now work on Dragonflight and later clients. `GetItemStats` was removed by Blizzard; the addon now uses `C_TooltipInfo.GetItemByID` to detect secondary stats.
+
+---
+
 ## [0.6.1] - 2026-04-15
 
 ### Fixed
